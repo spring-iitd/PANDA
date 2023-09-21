@@ -1,0 +1,93 @@
+import scapy
+import torch
+import struct
+
+from constants import MAX_BITS_PORT, MAX_BITS_SIZE
+
+def extract_bits_from_packets(packet):
+    """
+    Extracts binary representations of various packet attributes from a given packet.
+
+    Args:
+        packet (scapy.Packet): The packet object to extract attributes from.
+
+    Returns:
+        torch.Tensor or None: A tensor containing the binary representations of extracted attributes, or None if extraction fails.
+
+    This function extracts the following attributes from the packet:
+    - Timestamp: The timestamp of the packet, both integer and fractional parts.
+    - Source and Destination MAC Addresses.
+    - Source and Destination IP Addresses (if available).
+    - Source and Destination Ports (if available).
+    - Packet Size.
+
+    The extracted attributes are concatenated into a binary string representation and then converted to a tensor.
+
+    Example:
+    >>> packet = scapy.IP()/scapy.TCP()  # Create a sample packet
+    >>> packet_tensor = extract_bits_from_packets(packet)
+    """
+    try:
+        #### Extract timestamp ####
+        # Convert the integer part to binary
+        integer_part = int(packet.time)
+        binary_integer = bin(integer_part)[2:]
+
+        # Convert the fractional part to binary
+        fractional_part = packet.time - integer_part
+        binary_fractional = bin(struct.unpack('!I', struct.pack('!f', fractional_part))[0])[2:]
+
+        # Combine the integer and fractional binary parts
+        timestamp_bits = binary_integer + binary_fractional
+
+        #### Extract Src and Dst MAC Address ####
+        # Ethernet header
+        src_mac = packet[scapy.Ether].src.split(":")
+        src_mac_bits = ''.join(format(int(digit, 16), '08b') for digit in src_mac)
+        dst_mac = packet[scapy.Ether].dst.split(":")
+        dst_mac_bits = ''.join(format(int(digit, 16), '08b') for digit in dst_mac)
+        mac_bits = src_mac_bits + dst_mac_bits
+
+        #### Extract Src and Dst IP Address ####
+        # IP and TCP header
+        if packet.haslayer(scapy.IP):
+            src_ip = packet[scapy.IP].src.split(".")
+            src_ip_bits = ''.join(format(int(octet), '08b') for octet in src_ip)
+            dst_ip = packet[scapy.IP].dst.split(".")
+            dst_ip_bits = ''.join(format(int(octet), '08b') for octet in dst_ip)
+            ip_bits = src_ip_bits + dst_ip_bits
+
+            #### Extract Src and Dst Port ####
+            sport = None
+            dport = None
+            if packet.haslayer(scapy.TCP):
+                sport = packet[scapy.TCP].sport
+                dport = packet[scapy.TCP].dport
+            elif packet.haslayer(scapy.UDP):
+                sport = packet[scapy.UDP].sport
+                dport = packet[scapy.UDP].dport
+            else:
+                sport = 1055
+                dport = 1055
+            
+            sport_bits = format(sport, f'0{MAX_BITS_PORT}b')
+            dport_bits = format(dport, f'0{MAX_BITS_PORT}b')
+            port_bits = sport_bits + dport_bits
+
+        else:
+            ip_bits = "0" * 64
+            port_bits = "0" * 32
+
+        #### Extract Packet Size ####
+        packet_size = len(packet)
+        packet_size_bits = format(packet_size, f'0{MAX_BITS_SIZE}b')
+
+        #### Combine Each Bits ####
+        packet_bits = timestamp_bits + mac_bits + ip_bits + port_bits + packet_size_bits
+        packet_tensor = torch.tensor([int(bit) for bit in packet_bits])
+
+    except Exception as e:
+        print(f"Exception occured: {e}")
+        return None
+    
+    return packet_tensor
