@@ -2,6 +2,7 @@ from preprocessing import extract_bits_from_packets
 
 from scapy.utils import PcapReader
 from torch.utils.data import Dataset
+from preprocessing import FeatureRepresentation
 
 class PcapDataset(Dataset):
     """
@@ -44,9 +45,9 @@ class PcapDataset(Dataset):
 
     def __getitem__(self, index):
         """
-        Gets the item at the specified index.
+        Retrieves the item at the specified index.
 
-        Extracts features from the current and previous packets and applies the optional transform.
+        Extracts features from the current and previous packets and applies the optional transform function.
 
         Args:
             index (int): The index of the item to retrieve.
@@ -56,11 +57,11 @@ class PcapDataset(Dataset):
         """
         if index == 0:
             packet = next(self.packets)
-            packet_tensor = extract_bits_from_packets(packet, packet)
+            packet_tensor = FeatureRepresentation().get_int_representation(packet, packet)
         else:
             packet = next(self.packets)
             prev_packet = next(self.prev_packets)
-            packet_tensor = extract_bits_from_packets(packet, prev_packet)
+            packet_tensor = FeatureRepresentation().get_int_representation(packet, prev_packet)
 
         if self.transform:
             packet_tensor = self.transform(packet_tensor)

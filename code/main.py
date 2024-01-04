@@ -8,7 +8,7 @@ from utils import set_logger, save, load
 import torch
 import torch.nn as nn
 
-from models import Autoencoder
+from models import Autoencoder, AutoencoderInt
 from datasets import PcapDataset
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -84,12 +84,12 @@ criterion = nn.BCELoss()
 def get_threshold(args, model):
     # Create the DataLoader
     dataset = PcapDataset(pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=235 * args.batch_size, shuffle=False, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=194 * args.batch_size, shuffle=False, drop_last=True)
 
     reconstruction_errors = []
 
     for packets in dataloader:
-        reshaped_packets = packets.reshape(args.batch_size, 1, 235, 235).to(torch.float)
+        reshaped_packets = packets.reshape(args.batch_size, 1, 194, 194).to(torch.float)
         outputs = model(reshaped_packets)
 
         # Compute the loss
@@ -106,18 +106,21 @@ def get_threshold(args, model):
 def main(args):
     if args.eval:
         # here I've one model now, how to handle more number of models?
-        model = Autoencoder()
+        model = AutoencoderInt()
         # the model should have corresponding best model path
-        model.load_state_dict(torch.load('../artifacts/models/autoencoder_model_best.pth'))
+        model.load_state_dict(torch.load('../artifacts/models/autoencoderint_model_best.pth'))
         model = model.to(args.device)
         model.eval()
         print(f"Loaded the model in eval mode!!!")
 
         # get threshold
-        if args.get_threshold:
+        if args.threshold is not None:
+            threshold = -1 * args.threshold
+        elif args.get_threshold:
             threshold = -1 * get_threshold(args, model)
         else:
-            threshold = -1 * args.threshold
+            print("Neither any threshold provided or the get-threshold flag is set!!! Overriding to calculating threshold")
+            threshold = -1 * get_threshold(args, model)
         print(f"Threshold for the Anomaly Detector: {threshold}!!!")
 
         # TODO: Remove this
@@ -133,12 +136,12 @@ def main(args):
             for pcap_path in merged_data:
                 # Create the DataLoader
                 dataset = PcapDataset(pcap_file=pcap_path, max_iterations=sys.maxsize, transform=transform)
-                dataloader = DataLoader(dataset, batch_size=235 * args.batch_size, shuffle=False, drop_last=True)
+                dataloader = DataLoader(dataset, batch_size=194 * args.batch_size, shuffle=False, drop_last=True)
 
                 anomaly_scores = []
 
                 for packets in dataloader:
-                    reshaped_packets = packets.reshape(args.batch_size, 1, 235, 235).to(torch.float)
+                    reshaped_packets = packets.reshape(args.batch_size, 1, 194, 194).to(torch.float)
                     outputs = model(reshaped_packets)
 
                     # Compute the loss
@@ -176,6 +179,9 @@ def main(args):
         plt.text(0.5, 0.5, 'AUC score: {}'.format(auc_score), ha='center', va='center')
 
         plt.show()
+    
+    else:
+        ...
 
 
 if __name__ == "__main__":

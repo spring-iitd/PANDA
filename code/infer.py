@@ -2,7 +2,7 @@ import sys
 import torch
 import torch.nn as nn
 
-from models import Autoencoder
+from models import Autoencoder, AutoencoderInt
 from datasets import PcapDataset
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -19,15 +19,15 @@ criterion = nn.BCELoss()
 
 # Create the DataLoader
 dataset = PcapDataset(pcap_file=pcap_path, max_iterations=sys.maxsize, transform=transform)
-dataloader = DataLoader(dataset, batch_size=235 * batch_size, shuffle=False, drop_last=False)
+dataloader = DataLoader(dataset, batch_size=194 * batch_size, shuffle=False, drop_last=False)
 
-model = Autoencoder()
+model = AutoencoderInt()
 model.load_state_dict(torch.load('../artifacts/models/autoencoder_model_best.pth'))
 model.eval()
 
 re = []
 for packets in dataloader:
-    reshaped_packets = packets.reshape(batch_size, 1, 235, 235).to(torch.float)
+    reshaped_packets = packets.reshape(batch_size, 1, 194, 194).to(torch.float)
     outputs = model(reshaped_packets)
 
     loss = criterion(outputs, reshaped_packets)
