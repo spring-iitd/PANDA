@@ -4,6 +4,7 @@ import argparse
 
 from constants import benign_data, malicious_data, merged_data
 from utils import set_logger, save, load
+from train import trainer
 
 import torch
 import torch.nn as nn
@@ -62,14 +63,26 @@ def get_args_parser():
     parser = argparse.ArgumentParser('PANDA: Model Training and Inference', add_help=False)
     parser.add_argument('--root-dir', default="../",
                         help="folder where all the code, data, and artifacts lie")
-    parser.add_argument('--batch-size', default=1, type=int)
+    # model related arguments
+    parser.add_argument('--model-name', default='Autoencoder', type=str)
+    parser.add_argument('--loss', default='BCELoss', type=str)
+    parser.add_argument('--optimizer', default='Adam', type=str)
+    parser.add_argument('--lr', default=0.001, type=float)
+
+    # training related arguments
+    parser.add_argument('--num-epochs', default=30, type=int)
+    parser.add_argument('--print-interval', default=5, type=int)
+    parser.add_argument('--batch-size', default=8, type=int)
     parser.add_argument('--traindata-file', default='../data/benign/weekday.pcap')
+    # TODO: Incorporate traindata-len in the training loop (currently not used)
     parser.add_argument('--traindata-len', default=10000, type=int,
                         help="number of packets used to train the model")
     parser.add_argument('--device', default='cuda',
                         help="device to use for training / testing")
-    parser.add_argument('--model-name', default='ae_best', type=str,
-                        help="Name of the model after training/ using for inference")
+
+    # inference related arguments
+    # parser.add_argument('--model-name', default='ae_best', type=str,
+    #                     help="Name of the model after training/ using for inference")
     parser.add_argument('--eval', action='store_true', default=False,
                         help='perform inference')
     parser.add_argument('--get-threshold', action='store_true', default=False,
@@ -181,7 +194,8 @@ def main(args):
         plt.show()
     
     else:
-        ...
+        print(f"Training the model!!!")
+        trainer(args)
 
 
 if __name__ == "__main__":
