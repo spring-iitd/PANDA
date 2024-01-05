@@ -43,3 +43,14 @@ So far, we have tried attacks such as:
 To run an attack, run the following command:
 
 ```python attack_main.py --device cpu --attack fgsm```
+
+## Scope of Change in Code:
+1. Addition of a new data representation method:\
+    Change in files:
+    ```datasets.py, preprocessing.py, models.py, train.py, attack_main.py```
+2. Addition of a new model:\
+    Change in files:
+    ```models.py, train.py, attack_main.py```
+3. Addition of a new attack:\
+    Change in files:
+    ```attacks.py, attack_main.py```

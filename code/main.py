@@ -4,11 +4,13 @@ import argparse
 
 from constants import benign_data, malicious_data, merged_data
 from utils import set_logger, save, load
+from train import trainer
+from infer import infer
 
 import torch
 import torch.nn as nn
 
-from models import Autoencoder
+from models import Autoencoder, AutoencoderInt
 from datasets import PcapDataset
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -62,14 +64,24 @@ def get_args_parser():
     parser = argparse.ArgumentParser('PANDA: Model Training and Inference', add_help=False)
     parser.add_argument('--root-dir', default="../",
                         help="folder where all the code, data, and artifacts lie")
-    parser.add_argument('--batch-size', default=1, type=int)
+    # model related arguments
+    parser.add_argument('--model-name', default='Autoencoder', type=str)
+    parser.add_argument('--loss', default='BCELoss', type=str)
+    parser.add_argument('--optimizer', default='Adam', type=str)
+    parser.add_argument('--lr', default=0.001, type=float)
+
+    # training related arguments
+    parser.add_argument('--num-epochs', default=30, type=int)
+    parser.add_argument('--print-interval', default=5, type=int)
+    parser.add_argument('--batch-size', default=8, type=int)
     parser.add_argument('--traindata-file', default='../data/benign/weekday.pcap')
+    # TODO: Incorporate traindata-len in the training loop (currently not used)
     parser.add_argument('--traindata-len', default=10000, type=int,
                         help="number of packets used to train the model")
     parser.add_argument('--device', default='cuda',
                         help="device to use for training / testing")
-    parser.add_argument('--model-name', default='ae_best', type=str,
-                        help="Name of the model after training/ using for inference")
+
+    # inference related arguments
     parser.add_argument('--eval', action='store_true', default=False,
                         help='perform inference')
     parser.add_argument('--get-threshold', action='store_true', default=False,
@@ -84,12 +96,12 @@ criterion = nn.BCELoss()
 def get_threshold(args, model):
     # Create the DataLoader
     dataset = PcapDataset(pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=235 * args.batch_size, shuffle=False, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=194 * args.batch_size, shuffle=False, drop_last=True)
 
     reconstruction_errors = []
 
     for packets in dataloader:
-        reshaped_packets = packets.reshape(args.batch_size, 1, 235, 235).to(torch.float)
+        reshaped_packets = packets.reshape(args.batch_size, 1, 194, 194).to(torch.float)
         outputs = model(reshaped_packets)
 
         # Compute the loss
@@ -105,21 +117,6 @@ def get_threshold(args, model):
 
 def main(args):
     if args.eval:
-        # here I've one model now, how to handle more number of models?
-        model = Autoencoder()
-        # the model should have corresponding best model path
-        model.load_state_dict(torch.load('../artifacts/models/autoencoder_model_best.pth'))
-        model = model.to(args.device)
-        model.eval()
-        print(f"Loaded the model in eval mode!!!")
-
-        # get threshold
-        if args.get_threshold:
-            threshold = -1 * get_threshold(args, model)
-        else:
-            threshold = -1 * args.threshold
-        print(f"Threshold for the Anomaly Detector: {threshold}!!!")
-
         # TODO: Remove this
         saved = False
 
@@ -129,33 +126,7 @@ def main(args):
             y_pred = load("../artifacts/objects/anomaly_detectors/autoencoder/y_pred")["y_pred"]
 
         else:
-            y_true, y_pred = [], []
-            for pcap_path in merged_data:
-                # Create the DataLoader
-                dataset = PcapDataset(pcap_file=pcap_path, max_iterations=sys.maxsize, transform=transform)
-                dataloader = DataLoader(dataset, batch_size=235 * args.batch_size, shuffle=False, drop_last=True)
-
-                anomaly_scores = []
-
-                for packets in dataloader:
-                    reshaped_packets = packets.reshape(args.batch_size, 1, 235, 235).to(torch.float)
-                    outputs = model(reshaped_packets)
-
-                    # Compute the loss
-                    loss = criterion(outputs, reshaped_packets)
-                    anomaly_score = -1 * loss.data
-                    anomaly_scores.append(anomaly_score)
-
-                    y_true.append(1 if "malicious" in pcap_path else 0)
-                    y_pred.append(1 if anomaly_score > threshold else 0)
-
-                avg_anomaly_score = sum(anomaly_scores)/ len(anomaly_scores)
-                print(f"Average anomaly score for {pcap_path.split('/')[-1]} is: {avg_anomaly_score}")
-
-            # save y_true, y_pred, and anomaly_scores as corresponding objects
-            save(path="../artifacts/objects/anomaly_detectors/autoencoder/anomaly_scores", params={"anomaly_scores": anomaly_scores})
-            save(path="../artifacts/objects/anomaly_detectors/autoencoder/y_true", params={"y_true": y_true})
-            save(path="../artifacts/objects/anomaly_detectors/autoencoder/y_pred", params={"y_pred": y_pred})
+            y_true, y_pred, anomaly_scores = infer(args)
 
         precision, recall, f1_score, _ = precision_recall_fscore_support(
             y_true, y_pred, average='binary'
@@ -176,6 +147,10 @@ def main(args):
         plt.text(0.5, 0.5, 'AUC score: {}'.format(auc_score), ha='center', va='center')
 
         plt.show()
+    
+    else:
+        print(f"Training the model!!!")
+        trainer(args)
 
 
 if __name__ == "__main__":
