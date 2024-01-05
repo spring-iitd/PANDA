@@ -6,6 +6,9 @@ from torch.utils.data import DataLoader
 class Autoencoder(nn.Module):
     def __init__(self):
         super(Autoencoder, self).__init__()
+        self.dataset = "PcapDataset"
+        self.input_dim = 235
+
         # Encoder
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1),  # Convolutional layer 1
@@ -31,6 +34,9 @@ class Autoencoder(nn.Module):
 class AutoencoderInt(nn.Module):
     def __init__(self):
         super(AutoencoderInt, self).__init__()
+        self.dataset = "PcapDatasetInt"
+        self.input_dim = 194
+
         # Encoder
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1),  # Convolutional layer 1
