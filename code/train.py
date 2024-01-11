@@ -49,7 +49,7 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
         # Calculate average loss for the epoch
         avg_epoch_loss = running_loss / (i+1)
 
-        return avg_epoch_loss
+    return avg_epoch_loss
 
 def trainer(args):
     """
@@ -91,17 +91,29 @@ def trainer(args):
             print(f"BEST LOSS: {best_loss}")
             best_model_state = model.state_dict()
 
+            # Check if the folder exists, if not create it
+            folder_path = f"../artifacts/models/{args.model_name}/"
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+
+            # Define the file path for saving the best model
+            # TODO: Add the epoch number to the file name and save an entire state dictionary
+            file_path = os.path.join(folder_path, "model.pth")
+
+            # Save the best trained model
+            torch.save(best_model_state, file_path)
+
         print(f"Epoch {epoch+1} Average Loss: {avg_epoch_loss}")
 
-    # Check if the folder exists, if not create it
-    folder_path = f"../artifacts/models/{args.model_name}/"
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
+    # # Check if the folder exists, if not create it
+    # folder_path = f"../artifacts/models/{args.model_name}/"
+    # if not os.path.exists(folder_path):
+    #     os.makedirs(folder_path)
 
-    # Define the file path for saving the best model
-    # TODO: Add the epoch number to the file name and save an entire state dictionary
-    file_path = os.path.join(folder_path, "model.pth")
+    # # Define the file path for saving the best model
+    # # TODO: Add the epoch number to the file name and save an entire state dictionary
+    # file_path = os.path.join(folder_path, "model.pth")
 
-    # Save the best trained model
-    torch.save(best_model_state, file_path)
+    # # Save the best trained model
+    # torch.save(best_model_state, file_path)
     print(f"Best average reconstruction error over the entire dataset: {best_loss}")

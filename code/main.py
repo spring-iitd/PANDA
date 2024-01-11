@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 
 from models import Autoencoder, AutoencoderInt
-from datasets import PcapDataset
+from datasets import *
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_recall_fscore_support, roc_curve, roc_auc_score
@@ -23,42 +23,42 @@ transform = transforms.Compose([
     # Add any desired transformations here
 ])
 
-def run(pcap_path, dataset_name):
-    # Load the trained autoencoder model
-    model = Autoencoder()
-    model.load_state_dict(torch.load('../artifacts/models/autoencoder_model_best.pth'))
-    model.eval()
+# def run(pcap_path, dataset_name):
+#     # Load the trained autoencoder model
+#     model = Autoencoder()
+#     model.load_state_dict(torch.load('../artifacts/models/autoencoder_model_best.pth'))
+#     model.eval()
 
-    batch_size = 1
+#     batch_size = 1
 
-    # Create the DataLoader
-    dataset = PcapDataset(pcap_file=pcap_path, max_iterations=sys.maxsize, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=235 * batch_size, shuffle=False, drop_last=True)
+#     # Create the DataLoader
+#     dataset = PcapDataset(pcap_file=pcap_path, max_iterations=sys.maxsize, transform=transform)
+#     dataloader = DataLoader(dataset, batch_size=235 * batch_size, shuffle=False, drop_last=True)
 
-    reconstruction_errors = []
+#     reconstruction_errors = []
 
-    for packets in dataloader:
-        reshaped_packets = packets.reshape(batch_size, 1, 235, 235).to(torch.float)
-        outputs = model(reshaped_packets)
+#     for packets in dataloader:
+#         reshaped_packets = packets.reshape(batch_size, 1, 235, 235).to(torch.float)
+#         outputs = model(reshaped_packets)
 
-        # Compute the loss
-        loss = criterion(outputs, reshaped_packets)
-        reconstruction_errors.append(loss.data)
+#         # Compute the loss
+#         loss = criterion(outputs, reshaped_packets)
+#         reconstruction_errors.append(loss.data)
     
-    # Generate x-axis values (image indices)
-    image_indices = np.arange(len(reconstruction_errors))
+#     # Generate x-axis values (image indices)
+#     image_indices = np.arange(len(reconstruction_errors))
 
-    # Create a line curve (line plot)
-    plt.figure(figsize=(10, 6))
-    plt.plot(image_indices, reconstruction_errors, marker='o', linestyle='-', color='b')
-    plt.title(f'Reconstruction Error Curve: {dataset_name}')
-    plt.xlabel('Image Index')
-    plt.ylabel('Reconstruction Error')
-    plt.grid(True)
+#     # Create a line curve (line plot)
+#     plt.figure(figsize=(10, 6))
+#     plt.plot(image_indices, reconstruction_errors, marker='o', linestyle='-', color='b')
+#     plt.title(f'Reconstruction Error Curve: {dataset_name}')
+#     plt.xlabel('Image Index')
+#     plt.ylabel('Reconstruction Error')
+#     plt.grid(True)
 
-    # Show or save the plot
-    plt.show()
-    plt.savefig("../artifacts/plots/RE_plot")
+#     # Show or save the plot
+#     plt.show()
+#     plt.savefig("../artifacts/plots/RE_plot")
 
 def get_args_parser():
     parser = argparse.ArgumentParser('PANDA: Model Training and Inference', add_help=False)
@@ -74,7 +74,7 @@ def get_args_parser():
     parser.add_argument('--num-epochs', default=30, type=int)
     parser.add_argument('--print-interval', default=5, type=int)
     parser.add_argument('--batch-size', default=8, type=int)
-    parser.add_argument('--traindata-file', default='../data/benign/weekday.pcap')
+    parser.add_argument('--traindata-file', default='../data/benign/weekday_100k.pcap')
     # TODO: Incorporate traindata-len in the training loop (currently not used)
     parser.add_argument('--traindata-len', default=10000, type=int,
                         help="number of packets used to train the model")
@@ -93,27 +93,73 @@ def get_args_parser():
 
 criterion = nn.BCELoss()
 
-def get_threshold(args, model):
-    # Create the DataLoader
-    dataset = PcapDataset(pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=194 * args.batch_size, shuffle=False, drop_last=True)
+# def get_threshold(args, model):
+#     # Create the DataLoader
+#     dataset = PcapDataset(pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform)
+#     dataloader = DataLoader(dataset, batch_size=194 * args.batch_size, shuffle=False, drop_last=True)
 
-    reconstruction_errors = []
+#     reconstruction_errors = []
+
+#     for packets in dataloader:
+#         reshaped_packets = packets.reshape(args.batch_size, 1, 194, 194).to(torch.float)
+#         outputs = model(reshaped_packets)
+
+#         # Compute the loss
+#         loss = criterion(outputs, reshaped_packets)
+#         reconstruction_errors.append(loss.data)
+
+#     # finding the 95th percentile of the reconstruction error distribution for threshold
+#     reconstruction_errors.sort(reverse=True)
+#     ninety_fifth_percentile_index = int(0.90 * len(reconstruction_errors))
+#     threshold = reconstruction_errors[ninety_fifth_percentile_index]
+
+#     return threshold
+
+def plot_recon(args):
+    # Load the trained autoencoder model
+    model = eval(args.model_name)()
+    model.load_state_dict(torch.load(f"../artifacts/models/{args.model_name}/model.pth"))
+    model = model.to(args.device)
+    model.eval()
+    print(f"Loaded the model in eval mode for plotting!!!")
+
+    transform = transforms.Compose([
+        # Add any desired transformations here
+    ])
+
+    # model = Autoencoder()
+    # model.load_state_dict(torch.load('autoencoder_model_best.pth'))
+    # model.eval()
+
+    batch_size = 1
+
+    # Create the DataLoader
+    dataset = eval(model.dataset)(pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform)
+    dataloader = DataLoader(dataset, batch_size=model.input_dim, shuffle=False, drop_last=True)
 
     for packets in dataloader:
-        reshaped_packets = packets.reshape(args.batch_size, 1, 194, 194).to(torch.float)
+        reshaped_packets = packets.reshape(batch_size, 1, model.input_dim, model.input_dim).to(torch.float)
         outputs = model(reshaped_packets)
 
-        # Compute the loss
-        loss = criterion(outputs, reshaped_packets)
-        reconstruction_errors.append(loss.data)
+        # Convert tensors to numpy arrays for plotting
+        original_image = reshaped_packets[0].squeeze().cpu().numpy()
+        reconstructed_image = outputs[0].squeeze().detach().cpu().numpy()
 
-    # finding the 95th percentile of the reconstruction error distribution for threshold
-    reconstruction_errors.sort(reverse=True)
-    ninety_fifth_percentile_index = int(0.90 * len(reconstruction_errors))
-    threshold = reconstruction_errors[ninety_fifth_percentile_index]
+        # Create subplots for original and reconstructed images
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+        fig.suptitle(args.traindata_file.split(".")[0], fontsize=14)
+        axes[0].set_title('Original Image')
+        axes[0].imshow(original_image, cmap='gray')
+        axes[0].axis('off')
 
-    return threshold
+        axes[1].set_title('Reconstructed Image')
+        axes[1].imshow(reconstructed_image, cmap='gray')
+        axes[1].axis('off')
+
+        # Show the images side by side
+        plt.tight_layout()
+        plt.show()
+        break
 
 def main(args):
     if args.eval:
@@ -149,9 +195,12 @@ def main(args):
         plt.show()
     
     else:
+        print(args.traindata_file)
         print(f"Training the model!!!")
         trainer(args)
 
+    print(f"Plotting the original and reconstructed images!!!")
+    plot_recon(args)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser('Model training and evaluation script', parents=[get_args_parser()])

@@ -15,7 +15,7 @@ def get_threshold(args, model, criterion):
     transform = transforms.Compose([
         # Add any desired transformations here
     ])
-    dataset = PcapDataset(pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform)
+    dataset = eval(model.dataset)(pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform)
     dataloader = DataLoader(dataset, batch_size=model.input_dim * args.batch_size, shuffle=False, drop_last=True)
 
     reconstruction_errors = []
@@ -59,7 +59,7 @@ def infer(args):
         threshold = -1 * get_threshold(args, model, criterion)
     else:
         print("Neither any threshold provided or the get-threshold flag is set!!! Overriding to calculating threshold")
-        threshold = -1 * get_threshold(args, model)
+        threshold = -1 * get_threshold(args, model, criterion)
     print(f"Threshold for the Anomaly Detector: {threshold}!!!")
 
     y_true, y_pred = [], []
