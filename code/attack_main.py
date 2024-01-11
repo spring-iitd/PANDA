@@ -57,7 +57,7 @@ def get_args_parser():
     parser.add_argument('--batch-size', default=1, type=int)
     parser.add_argument('--device', default='cuda',
                         help="device to use for training/ testing")
-    parser.add_argument('--surrogate-model', default='autoencoder_model_best', type=str,
+    parser.add_argument('--surrogate-model', default='model', type=str,
                         help="Name of the surrogate model")
     parser.add_argument('--target-model', default='kitsune', type=str,
                         help="Name of the target model")
@@ -71,12 +71,16 @@ def get_args_parser():
 criterion = nn.BCELoss()
 
 def main(args):
+    # TODO: While gettting data representation, it's ignoring some of the packets so that the 
+    #       the format is intact. Resolve that issue. The print satetement in the update_timestamps
+    #       function shows that the number of packets in the pcap file and the number of inter-arrival
+    #       times are not the same!!!! This is a major issue.
     # create an object of the attack class
     args.pcap_path = pcap_path
     args.adv_pcap_path = adv_pcap_path
     attack = Attack(args=args)
     attack_method = getattr(attack, args.attack)
-    re, adv_re, y_true, y_pred, taus = attack_method(epsilon=0.5)
+    re, adv_re, y_true, y_pred, taus = attack_method(epsilon=0.8)
 
     print(f"Pcap file: {pcap_path.split('/')[-1][:-5]}")
     print(f"Mean RE for malicious packets: {sum(re)/ len(re)}")
@@ -96,7 +100,7 @@ def main(args):
     plt.plot(image_indices, re, marker='o', linestyle='-', color='b', label="Clean Data")
     plt.plot(image_indices, adv_re, marker='o', linestyle='-', color='r', label="Advesarial Data")
     plt.axhline(y=0.2661, color='green', linestyle='--', label='Threshold')
-    plt.title(f"Reconstruction Error Curve: {' '.join(pcap_path.split('/')[-1][:-5].split('_'))}")
+    plt.title(f"Reconstruction Error Curve: {pcap_path.split('/')[-1][:-5]}_{args.attack}")
     plt.xlabel('Image Index')
     plt.ylabel('Reconstruction Error')
 
@@ -105,7 +109,7 @@ def main(args):
     plt.grid(True)
 
     # Show or save the plot
-    plt.savefig(f"../artifacts/plots/{' '.join(pcap_path.split('/')[-1][:-5].split('_'))}")
+    plt.savefig(f"../artifacts/plots/{pcap_path.split('/')[-1][:-5]}_{args.attack}.png")
 
     image_indices = np.arange(len(adv_re))
 

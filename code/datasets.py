@@ -1,4 +1,4 @@
-from preprocessing import extract_bits_from_packets
+# from preprocessing import extract_bits_from_packets
 
 from scapy.utils import PcapReader
 from torch.utils.data import Dataset
