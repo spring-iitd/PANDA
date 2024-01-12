@@ -24,18 +24,23 @@ def get_timegaps(packet):
 
 class Attack:
     def __init__(self, args):
-        self.model_path = args.root_dir + "artifacts/models/AutoencoderInt/" + args.surrogate_model + ".pth"
+        self.model = eval(args.surrogate_model)().to(args.device)
+        self.model.load_state_dict(torch.load(f"../artifacts/models/{args.surrogate_model}/model.pth"))
+        # self.model_path = args.root_dir + "artifacts/models/AutoencoderInt/" + args.surrogate_model + ".pth"
         self.batch_size = args.batch_size
         self.pcap_path = args.pcap_path
 
         # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = args.device
+        # TODO: store models along with loss function and optimizer and load here.
         self.criterion = nn.BCELoss()
-        self.model = AutoencoderInt().to(self.device)
-        self.model.load_state_dict(torch.load(self.model_path))
+        # self.model = AutoencoderInt().to(self.device)
+        # self.model.load_state_dict(torch.load(self.model_path))
         self.model.eval()
+        args.selected_columns = args.selected_columns + [self.model.input_dim - 1]
         self.mask = torch.zeros(self.model.input_dim, self.model.input_dim).to(self.device)
-        self.mask[:, :1] = 1
+        self.mask[:, args.selected_columns] = 1
+        print(self.mask)
 
     def fgsm(self, epsilon):
         dataset = eval(self.model.dataset)(pcap_file=self.pcap_path, max_iterations=sys.maxsize, transform=transform)
@@ -121,6 +126,9 @@ class Attack:
             adversarial_packets = reshaped_packets.clone().detach()
             adversarial_packets.requires_grad = True
 
+            # clean loss
+            outputs = self.model(reshaped_packets)
+            clean_loss = self.criterion(outputs, reshaped_packets)
             for _ in range(num_steps):
                 # Forward pass through the autoencoder
                 reconstructed_output = self.model(adversarial_packets)
@@ -136,7 +144,7 @@ class Attack:
                 adversarial_packets = torch.clamp(adversarial_packets, 0, 1).detach()
                 adversarial_packets.requires_grad = True
 
-            re.append(loss.data)
+            re.append(clean_loss.data)
             adv_outputs = self.model(adversarial_packets)
             adv_loss = self.criterion(adv_outputs, adversarial_packets)
             adv_anomaly_score = -1 * adv_loss.data
