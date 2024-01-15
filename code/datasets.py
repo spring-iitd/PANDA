@@ -1,8 +1,8 @@
 # from preprocessing import extract_bits_from_packets
-
+from preprocessing import FeatureRepresentation
 from scapy.utils import PcapReader
 from torch.utils.data import Dataset
-from preprocessing import FeatureRepresentation
+
 
 class PcapDataset(Dataset):
     """
@@ -57,16 +57,21 @@ class PcapDataset(Dataset):
         """
         if index == 0:
             packet = next(self.packets)
-            packet_tensor = FeatureRepresentation().get_bit_representation(packet, packet)
+            packet_tensor = FeatureRepresentation().get_bit_representation(
+                packet, packet
+            )
         else:
             packet = next(self.packets)
             prev_packet = next(self.prev_packets)
-            packet_tensor = FeatureRepresentation().get_bit_representation(packet, prev_packet)
+            packet_tensor = FeatureRepresentation().get_bit_representation(
+                packet, prev_packet
+            )
 
         if self.transform:
             packet_tensor = self.transform(packet_tensor)
 
         return packet_tensor
+
 
 class PcapDatasetInt(Dataset):
     """
@@ -121,11 +126,15 @@ class PcapDatasetInt(Dataset):
         """
         if index == 0:
             packet = next(self.packets)
-            packet_tensor = FeatureRepresentation().get_int_representation(packet, packet)
+            packet_tensor = FeatureRepresentation().get_int_representation(
+                packet, packet
+            )
         else:
             packet = next(self.packets)
             prev_packet = next(self.prev_packets)
-            packet_tensor = FeatureRepresentation().get_int_representation(packet, prev_packet)
+            packet_tensor = FeatureRepresentation().get_int_representation(
+                packet, prev_packet
+            )
 
         if self.transform:
             packet_tensor = self.transform(packet_tensor)

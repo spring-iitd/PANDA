@@ -1,7 +1,8 @@
-import torch
 import scapy.all as scapy
+import torch
+from constants import MAX_BITS_PORT
+from constants import MAX_BITS_SIZE
 
-from constants import MAX_BITS_PORT, MAX_BITS_SIZE
 
 class FeatureRepresentation:
     def __init__(self):
@@ -10,8 +11,8 @@ class FeatureRepresentation:
 
     def _extract_timestamp(self, get_integer=False):
         current_time = float(self.packet.time)
-        prev_time    = float(self.prev_packet.time)
-        int_diff     = current_time - prev_time
+        prev_time = float(self.prev_packet.time)
+        int_diff = current_time - prev_time
 
         if get_integer:
             timestamp_tensor = torch.tensor([int_diff])
@@ -29,9 +30,9 @@ class FeatureRepresentation:
     def _extract_mac_address(self):
         if self.packet.haslayer(scapy.Ether):
             src_mac = self.packet[scapy.Ether].src.split(":")
-            src_mac_bits = ''.join(format(int(digit, 16), '08b') for digit in src_mac)
+            src_mac_bits = "".join(format(int(digit, 16), "08b") for digit in src_mac)
             dst_mac = self.packet[scapy.Ether].dst.split(":")
-            dst_mac_bits = ''.join(format(int(digit, 16), '08b') for digit in dst_mac)
+            dst_mac_bits = "".join(format(int(digit, 16), "08b") for digit in dst_mac)
             mac_bits = src_mac_bits + dst_mac_bits
             mac_tensor = torch.tensor([int(bit) for bit in mac_bits])
         else:
@@ -42,9 +43,9 @@ class FeatureRepresentation:
     def _extract_ip_address(self):
         if self.packet.haslayer(scapy.IP):
             src_ip = self.packet[scapy.IP].src.split(".")
-            src_ip_bits = ''.join(format(int(octet), '08b') for octet in src_ip)
+            src_ip_bits = "".join(format(int(octet), "08b") for octet in src_ip)
             dst_ip = self.packet[scapy.IP].dst.split(".")
-            dst_ip_bits = ''.join(format(int(octet), '08b') for octet in dst_ip)
+            dst_ip_bits = "".join(format(int(octet), "08b") for octet in dst_ip)
             ip_bits = src_ip_bits + dst_ip_bits
             ip_tensor = torch.tensor([int(bit) for bit in ip_bits])
         else:
@@ -65,9 +66,9 @@ class FeatureRepresentation:
             else:
                 sport = 1055
                 dport = 1055
-            
-            sport_bits = format(sport, f'0{MAX_BITS_PORT}b')
-            dport_bits = format(dport, f'0{MAX_BITS_PORT}b')
+
+            sport_bits = format(sport, f"0{MAX_BITS_PORT}b")
+            dport_bits = format(dport, f"0{MAX_BITS_PORT}b")
             port_bits = sport_bits + dport_bits
             port_tensor = torch.tensor([int(bit) for bit in port_bits])
         else:
@@ -84,7 +85,7 @@ class FeatureRepresentation:
             normalized_size = (packet_size - min_size) / (max_size - min_size)
             packet_size_tensor = torch.tensor([normalized_size])
         else:
-            packet_size_bits = format(packet_size, f'0{MAX_BITS_SIZE}b')
+            packet_size_bits = format(packet_size, f"0{MAX_BITS_SIZE}b")
             packet_size_tensor = torch.tensor([int(bit) for bit in packet_size_bits])
 
         return packet_size_tensor
@@ -107,14 +108,22 @@ class FeatureRepresentation:
             port_tensor = self._extract_port()
             packet_size_tensor = self._extract_packet_size()
 
-            packet_tensor = torch.cat((timestamp_tensor, mac_tensor, ip_tensor, port_tensor, packet_size_tensor))
+            packet_tensor = torch.cat(
+                (
+                    timestamp_tensor,
+                    mac_tensor,
+                    ip_tensor,
+                    port_tensor,
+                    packet_size_tensor,
+                )
+            )
 
             return packet_tensor
 
         except Exception as e:
             print(f"Exception occured: {e}")
             return None
-    
+
     def get_int_representation(self, packet, prev_packet):
         """
         Extracts integer representations of various packet attributes from a given packet.
@@ -133,7 +142,15 @@ class FeatureRepresentation:
             port_tensor = self._extract_port()
             packet_size_tensor = self._extract_packet_size(get_integer=True)
 
-            packet_tensor = torch.cat((timestamp_tensor, mac_tensor, ip_tensor, port_tensor, packet_size_tensor))
+            packet_tensor = torch.cat(
+                (
+                    timestamp_tensor,
+                    mac_tensor,
+                    ip_tensor,
+                    port_tensor,
+                    packet_size_tensor,
+                )
+            )
 
             return packet_tensor
 

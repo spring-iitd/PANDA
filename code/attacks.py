@@ -1,16 +1,18 @@
 import sys
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from models import *
-from datasets import *
 
 # Define transformations (if needed)
-transform = transforms.Compose([
-    # Add any desired transformations here
-])
+transform = transforms.Compose(
+    [
+        # Add any desired transformations here
+    ]
+)
+
 
 def get_timegaps(packet):
     first_32_bits = packet[:, :1]
@@ -22,10 +24,13 @@ def get_timegaps(packet):
 
     return integer_values, sum(integer_values)
 
+
 class Attack:
     def __init__(self, args):
         self.model = eval(args.surrogate_model)().to(args.device)
-        self.model.load_state_dict(torch.load(f"../artifacts/models/{args.surrogate_model}/model.pth"))
+        self.model.load_state_dict(
+            torch.load(f"../artifacts/models/{args.surrogate_model}/model.pth")
+        )
         # self.model_path = args.root_dir + "artifacts/models/AutoencoderInt/" + args.surrogate_model + ".pth"
         self.batch_size = args.batch_size
         self.pcap_path = args.pcap_path
@@ -38,13 +43,21 @@ class Attack:
         # self.model.load_state_dict(torch.load(self.model_path))
         self.model.eval()
         args.selected_columns = args.selected_columns + [self.model.input_dim - 1]
-        self.mask = torch.zeros(self.model.input_dim, self.model.input_dim).to(self.device)
+        self.mask = torch.zeros(self.model.input_dim, self.model.input_dim).to(
+            self.device
+        )
         self.mask[:, args.selected_columns] = 1
-        print(self.mask)
 
     def fgsm(self, epsilon):
-        dataset = eval(self.model.dataset)(pcap_file=self.pcap_path, max_iterations=sys.maxsize, transform=transform)
-        dataloader = DataLoader(dataset, batch_size=self.model.input_dim * self.batch_size, shuffle=False, drop_last=True)
+        dataset = eval(self.model.dataset)(
+            pcap_file=self.pcap_path, max_iterations=sys.maxsize, transform=transform
+        )
+        dataloader = DataLoader(
+            dataset,
+            batch_size=self.model.input_dim * self.batch_size,
+            shuffle=False,
+            drop_last=True,
+        )
 
         re = []
         adv_re = []
@@ -56,7 +69,13 @@ class Attack:
         for packets in dataloader:
             _, sum_clean_timegaps = get_timegaps(packets)
             total_time = total_time + sum_clean_timegaps
-            reshaped_packets = packets.reshape(self.batch_size, 1, self.model.input_dim, self.model.input_dim).to(torch.float).to(self.device)
+            reshaped_packets = (
+                packets.reshape(
+                    self.batch_size, 1, self.model.input_dim, self.model.input_dim
+                )
+                .to(torch.float)
+                .to(self.device)
+            )
             reshaped_packets.requires_grad = True
             outputs = self.model(reshaped_packets)
 
@@ -65,13 +84,14 @@ class Attack:
             re.append(loss.data)
             self.model.zero_grad()
 
-
             loss.backward()
 
             sign_data_grad = reshaped_packets.grad.data.sign()
 
             # Create the perturbed image by adjusting the original image
-            perturbed_packets = reshaped_packets + (epsilon * sign_data_grad) * self.mask
+            perturbed_packets = (
+                reshaped_packets + (epsilon * sign_data_grad) * self.mask
+            )
 
             # Clip the perturbed image to ensure it stays within valid data range
             perturbed_packets = torch.clamp(perturbed_packets, 0, 1)
@@ -92,7 +112,7 @@ class Attack:
         print(f"Total time: {total_time}, Adv: {adv_total_time}")
 
         return re, adv_re, y_true, y_pred, taus
-    
+
     def pgd(self, epsilon):
         """
         Performs PGD attack on the autoencoder model.
@@ -104,8 +124,15 @@ class Attack:
         # Define the PGD attack parameters
         num_steps = 10
 
-        dataset = eval(self.model.dataset)(pcap_file=self.pcap_path, max_iterations=sys.maxsize, transform=transform)
-        dataloader = DataLoader(dataset, batch_size=self.model.input_dim * self.batch_size, shuffle=False, drop_last=True)
+        dataset = eval(self.model.dataset)(
+            pcap_file=self.pcap_path, max_iterations=sys.maxsize, transform=transform
+        )
+        dataloader = DataLoader(
+            dataset,
+            batch_size=self.model.input_dim * self.batch_size,
+            shuffle=False,
+            drop_last=True,
+        )
 
         re = []
         adv_re = []
@@ -119,7 +146,13 @@ class Attack:
             total_time = total_time + sum_clean_timegaps
 
             # Get the clean input
-            reshaped_packets = packets.reshape(self.batch_size, 1, self.model.input_dim, self.model.input_dim).to(torch.float).to(self.device)
+            reshaped_packets = (
+                packets.reshape(
+                    self.batch_size, 1, self.model.input_dim, self.model.input_dim
+                )
+                .to(torch.float)
+                .to(self.device)
+            )
             reshaped_packets.requires_grad = True
 
             # Generate the adversarial example
@@ -140,7 +173,10 @@ class Attack:
                 self.model.zero_grad()
                 loss.backward()
 
-                adversarial_packets.data = adversarial_packets + epsilon * torch.sign(adversarial_packets.grad.data) * self.mask
+                adversarial_packets.data = (
+                    adversarial_packets
+                    + epsilon * torch.sign(adversarial_packets.grad.data) * self.mask
+                )
                 adversarial_packets = torch.clamp(adversarial_packets, 0, 1).detach()
                 adversarial_packets.requires_grad = True
 

@@ -11,7 +11,9 @@ benign_data = [
     # "../data/benign/weekday_06.pcap",
 ]
 
-malicious_data = ["../data/malicious/"+pcap for pcap in os.listdir("../data/malicious/")]
+malicious_data = [
+    "../data/malicious/" + pcap for pcap in os.listdir("../data/malicious/")
+]
 
 merged_data = benign_data + malicious_data
 

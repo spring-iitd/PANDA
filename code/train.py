@@ -1,16 +1,11 @@
 import os
 import sys
+
 import torch
-
-from models import *
-from datasets import *
-from constants import PCAP_PATH
-
 import torch.nn as nn
 import torch.optim as optim
-
-from torchvision import transforms
 from torch.utils.data import DataLoader
+from torchvision import transforms
 
 
 def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
@@ -22,8 +17,10 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
 
     for i, packets in enumerate(dataloader):
         running_loss = 0.0
-        reshaped_packets = packets.reshape(args.batch_size, 1, model.input_dim, model.input_dim).to(torch.float)
-        
+        reshaped_packets = packets.reshape(
+            args.batch_size, 1, model.input_dim, model.input_dim
+        ).to(torch.float)
+
         # Move the data to the device that is being used
         model = model.to(args.device)
         reshaped_packets = reshaped_packets.to(args.device)
@@ -47,9 +44,10 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
             print(f"Epoch {(i+1)}/ {(epoch+1)} Average Loss: {avg_loss}")
 
         # Calculate average loss for the epoch
-        avg_epoch_loss = running_loss / (i+1)
+        avg_epoch_loss = running_loss / (i + 1)
 
     return avg_epoch_loss
+
 
 def trainer(args):
     """
@@ -63,25 +61,38 @@ def trainer(args):
 
     # Define optimizer
     optimizer = getattr(optim, args.optimizer)(model.parameters(), lr=args.lr)
-    
-    # Define transformations (if needed)
-    transform = transforms.Compose([
-        # Add any desired transformations here
-    ])
 
-    best_loss = float('inf')
+    # Define transformations (if needed)
+    transform = transforms.Compose(
+        [
+            # Add any desired transformations here
+        ]
+    )
+
+    best_loss = float("inf")
     best_model_state = None
 
     # Training loop
     for epoch in range(args.num_epochs):
         # Create the dataset
-        dataset = eval(model.dataset)(pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform)
+        dataset = eval(model.dataset)(
+            pcap_file=args.traindata_file,
+            max_iterations=sys.maxsize,
+            transform=transform,
+        )
 
         # Create the DataLoader
-        dataloader = DataLoader(dataset, batch_size=model.input_dim * args.batch_size, shuffle=False, drop_last=True)
+        dataloader = DataLoader(
+            dataset,
+            batch_size=model.input_dim * args.batch_size,
+            shuffle=False,
+            drop_last=True,
+        )
 
         # Train the model for one epoch
-        avg_epoch_loss = _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args)
+        avg_epoch_loss = _train_one_epoch(
+            model, criterion, optimizer, dataloader, epoch, args
+        )
 
         # TODO: Add validation loop with early stopping here
 
