@@ -1,3 +1,4 @@
+import numpy as np
 import scapy.all as scapy
 import torch
 from constants import MAX_BITS_PORT
@@ -157,3 +158,49 @@ class FeatureRepresentation:
         except Exception as e:
             print(f"Exception occured: {e}")
             return None
+
+
+def packet_parser(packet):
+    IPtype = np.nan
+    timestamp = packet.time
+    framelen = len(packet)
+    if packet.haslayer(scapy.IP):  # IPv4
+        srcIP = packet[scapy.IP].src
+        dstIP = packet[scapy.IP].dst
+        IPtype = 0
+    elif packet.haslayer(scapy.IPv6):  # ipv6
+        srcIP = packet[scapy.IPv6].src
+        dstIP = packet[scapy.IPv6].dst
+        IPtype = 1
+    else:
+        srcIP = ""
+        dstIP = ""
+
+    if packet.haslayer(scapy.TCP):
+        srcproto = str(packet[scapy.TCP].sport)
+        dstproto = str(packet[scapy.TCP].dport)
+    elif packet.haslayer(scapy.UDP):
+        srcproto = str(packet[scapy.UDP].sport)
+        dstproto = str(packet[scapy.UDP].dport)
+    else:
+        srcproto = ""
+        dstproto = ""
+
+    srcMAC = packet.src
+    dstMAC = packet.dst
+    if srcproto == "":  # it's a L2/L1 level protocol
+        if packet.haslayer(scapy.ARP):  # is ARP
+            srcproto = "arp"
+            dstproto = "arp"
+            srcIP = packet[scapy.ARP].psrc  # src IP (ARP)
+            dstIP = packet[scapy.ARP].pdst  # dst IP (ARP)
+            IPtype = 0
+        elif packet.haslayer(scapy.ICMP):  # is ICMP
+            srcproto = "icmp"
+            dstproto = "icmp"
+            IPtype = 0
+        elif srcIP + srcproto + dstIP + dstproto == "":  # some other protocol
+            srcIP = packet.src  # src MAC
+            dstIP = packet.dst  # dst MAC
+
+    return IPtype, srcMAC, dstMAC, srcIP, srcproto, dstIP, dstproto, framelen, timestamp

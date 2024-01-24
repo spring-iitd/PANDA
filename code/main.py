@@ -4,7 +4,9 @@ import sys
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+from datasets import *  # noqa
 from infer import infer
+from models import *  # noqa
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import roc_curve
@@ -76,7 +78,7 @@ def get_args_parser():
     parser.add_argument("--num-epochs", default=30, type=int)
     parser.add_argument("--print-interval", default=5, type=int)
     parser.add_argument("--batch-size", default=8, type=int)
-    parser.add_argument("--traindata-file", default="../data/benign/weekday_100k.pcap")
+    parser.add_argument("--traindata-file", default="../data/benign/weekday_06.pcap")
     # TODO: Incorporate traindata-len in the training loop (currently not used)
     parser.add_argument(
         "--traindata-len",
@@ -225,7 +227,6 @@ def main(args):
         plt.show()
 
     else:
-        print(args.traindata_file)
         print("Training the model!!!")
         trainer(args)
 

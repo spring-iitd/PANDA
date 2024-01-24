@@ -1,9 +1,13 @@
 import os
 import sys
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from datasets import *  # noqa
+from feature_extractor import net_stat as ns
+from models import *  # noqa
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -14,12 +18,35 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
     """
     # Set the model to training mode
     model.train()
+    maxHost = 100000000000
+    maxSess = 100000000000
+    nstat = ns.netStat(np.nan, maxHost, maxSess)
 
-    for i, packets in enumerate(dataloader):
+    for i, packet in enumerate(dataloader):
         running_loss = 0.0
-        reshaped_packets = packets.reshape(
-            args.batch_size, 1, model.input_dim, model.input_dim
-        ).to(torch.float)
+        if model.raw:
+            x = nstat.updateGetStats(
+                packet["IPtype"].item(),
+                packet["srcMAC"][0],
+                packet["dstMAC"][0],
+                packet["srcIP"][0],
+                packet["srcproto"][0],
+                packet["dstIP"][0],
+                packet["dstproto"][0],
+                int(packet["framelen"]),
+                float(packet["timestamp"]),
+            )
+            # concatenate with the tensors
+            reshaped_packets = torch.cat(
+                (packet["timestamp"], packet["framelen"], torch.tensor(x))
+            ).to(torch.float)
+        else:
+            reshaped_packets = packet.reshape(
+                (args.batch_size // model.input_dim),
+                1,
+                model.input_dim,
+                model.input_dim,
+            ).to(torch.float)
 
         # Move the data to the device that is being used
         model = model.to(args.device)
@@ -69,6 +96,8 @@ def trainer(args):
         ]
     )
 
+    if not model.raw:
+        args.batch_size = model.input_dim * args.batch_size
     best_loss = float("inf")
     best_model_state = None
 
@@ -84,7 +113,7 @@ def trainer(args):
         # Create the DataLoader
         dataloader = DataLoader(
             dataset,
-            batch_size=model.input_dim * args.batch_size,
+            batch_size=args.batch_size,
             shuffle=False,
             drop_last=True,
         )

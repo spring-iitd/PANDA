@@ -43,3 +43,7 @@ Pcap file: ARP_Spoofing_Google-Nest-Mini_1
 Mean RE for malicious packets: 0.26101186871528625
 Mean RE for adversarial malicious packets: 0.3394051790237427
 Evasion Rate: 0.9444444444444444
+
+##### Setting: All Real Numbers Image:
+
+All the fields, namely size, time, ips, macs, ports are converted to integer numbers, then to a range between 0 to 1.
