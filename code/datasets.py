@@ -232,7 +232,7 @@ class PcapDatasetRaw(Dataset):
             "dstproto": dstproto,
             "framelen": float(framelen),
             "timestamp": float(timestamp),
-            "tensor": packet_tensor,
+            "packet_tensor": packet_tensor,
         }
 
         return packet_repr

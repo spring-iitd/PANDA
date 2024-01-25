@@ -230,8 +230,11 @@ def main(args):
         print("Training the model!!!")
         trainer(args)
 
-    print("Plotting the original and reconstructed images!!!")
-    plot_recon(args)
+    if not args.model_name == "AutoencoderRaw":
+        plot_recon(args)
+        print("Plotting the original and reconstructed images!!!")
+
+    print("Done!!!")
 
 
 if __name__ == "__main__":

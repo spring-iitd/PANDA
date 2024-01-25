@@ -25,21 +25,25 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
     for i, packet in enumerate(dataloader):
         running_loss = 0.0
         if model.raw:
-            x = nstat.updateGetStats(
-                packet["IPtype"].item(),
-                packet["srcMAC"][0],
-                packet["dstMAC"][0],
-                packet["srcIP"][0],
-                packet["srcproto"][0],
-                packet["dstIP"][0],
-                packet["dstproto"][0],
-                int(packet["framelen"]),
-                float(packet["timestamp"]),
-            )
+            tensors = []
+            for j in range(len(packet["IPtype"])):
+                x = nstat.updateGetStats(
+                    packet["IPtype"][j].item(),
+                    packet["srcMAC"][j],
+                    packet["dstMAC"][j],
+                    packet["srcIP"][j],
+                    packet["srcproto"][j],
+                    packet["dstIP"][j],
+                    packet["dstproto"][j],
+                    int(packet["framelen"][j]),
+                    float(packet["timestamp"][j]),
+                )
+                tensors.append(torch.tensor(x))
             # concatenate with the tensors
             reshaped_packets = torch.cat(
-                (packet["timestamp"], packet["framelen"], torch.tensor(x))
+                (packet["packet_tensor"], torch.stack(tensors)), dim=1
             ).to(torch.float)
+
         else:
             reshaped_packets = packet.reshape(
                 (args.batch_size // model.input_dim),

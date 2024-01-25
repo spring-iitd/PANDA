@@ -90,6 +90,7 @@ nstat = ns.netStat(np.nan, maxHost, maxSess)
 
 print("Reading PCAP file ...")
 for packet in dataloader:
+    # print(packet)
     while True:
         x = nstat.updateGetStats(
             packet["IPtype"].item(),
@@ -103,8 +104,8 @@ for packet in dataloader:
             float(packet["timestamp"]),
         )
         # concatenate with the tensors
-        features = torch.cat((packet["timestamp"], packet["framelen"], torch.tensor(x)))
-        print(features.shape)
+        features = torch.cat((packet["packet_tensor"][0], torch.tensor(x)))
+        print(features)
         break
     break
     #     print(x)

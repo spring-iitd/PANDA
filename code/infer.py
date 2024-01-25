@@ -51,7 +51,7 @@ def get_threshold(args, model, criterion):
             )
             # concatenate with the tensors
             reshaped_packets = torch.cat(
-                (packet["timestamp"], packet["framelen"], torch.tensor(x))
+                (packet["packet_tensor"][0], torch.tensor(x))
             ).to(torch.float)
         else:
             reshaped_packets = packet.reshape(
@@ -109,8 +109,10 @@ def infer(args):
             "Neither any threshold provided or the get-threshold flag is set!!! Overriding to calculating threshold"
         )
         threshold = -1 * get_threshold(args, model, criterion)
-    if model.raw:
+    if model.raw and args.threshold is None:
         threshold = get_threshold(args, model, criterion)
+    if model.raw and args.threshold is not None:
+        threshold = args.threshold
     print(f"Threshold for the Anomaly Detector: {threshold}!!!")
 
     if not model.raw:
@@ -118,7 +120,6 @@ def infer(args):
     y_true, y_pred = [], []
     for pcap_path in merged_data:
         # Create the DataLoader
-        print(args.batch_size)
         print(f"Processing {pcap_path}!!!")
         dataset = eval(model.dataset)(
             pcap_file=pcap_path, max_iterations=sys.maxsize, transform=transform
@@ -138,20 +139,23 @@ def infer(args):
 
         for packet in dataloader:
             if model.raw:
-                x = nstat.updateGetStats(
-                    packet["IPtype"].item(),
-                    packet["srcMAC"][0],
-                    packet["dstMAC"][0],
-                    packet["srcIP"][0],
-                    packet["srcproto"][0],
-                    packet["dstIP"][0],
-                    packet["dstproto"][0],
-                    int(packet["framelen"]),
-                    float(packet["timestamp"]),
-                )
+                tensors = []
+                for j in range(len(packet["IPtype"])):
+                    x = nstat.updateGetStats(
+                        packet["IPtype"][j].item(),
+                        packet["srcMAC"][j],
+                        packet["dstMAC"][j],
+                        packet["srcIP"][j],
+                        packet["srcproto"][j],
+                        packet["dstIP"][j],
+                        packet["dstproto"][j],
+                        int(packet["framelen"][j]),
+                        float(packet["timestamp"][j]),
+                    )
+                    tensors.append(torch.tensor(x))
                 # concatenate with the tensors
                 reshaped_packets = torch.cat(
-                    (packet["timestamp"], packet["framelen"], torch.tensor(x))
+                    (packet["packet_tensor"], torch.stack(tensors)), dim=1
                 ).to(torch.float)
             else:
                 reshaped_packets = packet.reshape(

@@ -138,17 +138,17 @@ class FeatureRepresentation:
         self.prev_packet = prev_packet
         try:
             timestamp_tensor = self._extract_timestamp(get_integer=True)
-            mac_tensor = self._extract_mac_address()
-            ip_tensor = self._extract_ip_address()
-            port_tensor = self._extract_port()
+            self._extract_mac_address()
+            self._extract_ip_address()
+            self._extract_port()
             packet_size_tensor = self._extract_packet_size(get_integer=True)
 
             packet_tensor = torch.cat(
                 (
                     timestamp_tensor,
-                    mac_tensor,
-                    ip_tensor,
-                    port_tensor,
+                    # mac_tensor,
+                    # ip_tensor,
+                    # port_tensor,
                     packet_size_tensor,
                 )
             )
