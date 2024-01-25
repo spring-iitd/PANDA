@@ -10,7 +10,6 @@ repos:
         -   id: check-added-large-files
             args: ['--maxkb=50000']  # Limit to files up to 50 megabytes
         -   id: debug-statements
-        -   id: requirements-txt-fixer
 
     -   repo: https://github.com/PyCQA/autoflake
         rev: v2.2.1
