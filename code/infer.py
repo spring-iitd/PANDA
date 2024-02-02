@@ -1,4 +1,5 @@
 import sys
+import time
 
 import numpy as np
 import torch
@@ -23,10 +24,12 @@ def get_threshold(args, model, criterion):
         pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform
     )
     if not model.raw:
-        args.batch_size = model.input_dim * args.batch_size
+        batch_size = model.input_dim * args.batch_size
+    else:
+        batch_size = args.batch_size
     dataloader = DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=batch_size,
         shuffle=False,
         drop_last=True,
     )
@@ -55,7 +58,7 @@ def get_threshold(args, model, criterion):
             ).to(torch.float)
         else:
             reshaped_packets = packet.reshape(
-                (args.batch_size // model.input_dim),
+                (batch_size // model.input_dim),
                 1,
                 model.input_dim,
                 model.input_dim,
@@ -70,7 +73,7 @@ def get_threshold(args, model, criterion):
         loss = criterion(outputs, reshaped_packets)
         reconstruction_errors.append(loss.data)
 
-    # finding the 95th percentile of the reconstruction error distribution for threshold
+    # finding the 90th percentile of the reconstruction error distribution for threshold
     reconstruction_errors.sort(reverse=True)
     ninety_fifth_percentile_index = int(0.90 * len(reconstruction_errors))
     threshold = reconstruction_errors[ninety_fifth_percentile_index]
@@ -138,6 +141,7 @@ def infer(args):
         nstat = ns.netStat(np.nan, maxHost, maxSess)
 
         for packet in dataloader:
+            start = time.time()
             if model.raw:
                 tensors = []
                 for j in range(len(packet["IPtype"])):
@@ -168,6 +172,11 @@ def infer(args):
             # Move the data to the device that is being used
             model = model.to(args.device)
             reshaped_packets = reshaped_packets.to(args.device)
+
+            # # print model and reshaped packets devices
+            # print(f"Model device: {next(model.parameters()).device}")
+            # print(f"Reshaped packets device: {reshaped_packets.device}")
+
             outputs = model(reshaped_packets)
 
             # Compute the loss
@@ -185,6 +194,16 @@ def infer(args):
         print(
             f"Average anomaly score for {pcap_path.split('/')[-1]} is: {avg_anomaly_score}"
         )
+
+        # print time taken to process the pcap file upto 4 decimal places with units
+        end = time.time()
+        time_taken = end - start
+        if time_taken < 60:
+            print(f"Time taken: {time_taken:.4f} seconds")
+        elif time_taken < 3600:
+            print(f"Time taken: {time_taken/60:.4f} minutes")
+        else:
+            print(f"Time taken: {time_taken/3600:.4f} hours")
 
     # save y_true, y_pred, and anomaly_scores as corresponding objects
     save(

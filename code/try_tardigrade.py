@@ -1,12 +1,16 @@
-# Import the Tarda library
-from tardigrade import AwesomeIDS
+import sys
+from datasets import PcapDatasetRaw
+from constants import PCAP_PATH
 
-# Create an instance of the AwesomeIDS class
-model = AwesomeIDS()
+from torch.utils.data import DataLoader
 
-# Example: Parsing data from a pcap file
-model.parse(
-    "../data/benign/weekday_100k.pcap",
-    "../data/benign/weekday_100k.csv",
-    save_netstat="../data/benign/weekday_100k_netstat.pkl",
-)
+PCAP_PATH = "../data/benign/weekday.pcap"
+
+dataset = PcapDatasetRaw(pcap_file=PCAP_PATH, max_iterations=sys.maxsize)
+
+# Create the DataLoader
+dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=True)
+for i, packets in enumerate(dataloader):
+    print(packets.time)
+    if i == 20:
+        break

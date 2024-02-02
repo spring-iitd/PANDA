@@ -10,23 +10,23 @@ class FeatureRepresentation:
         self.packet = None
         self.prev_packet = None
 
-    def _extract_timestamp(self, get_integer=False):
+    def _extract_iat(self, get_integer=False):
         current_time = float(self.packet.time)
         prev_time = float(self.prev_packet.time)
         int_diff = current_time - prev_time
 
         if get_integer:
-            timestamp_tensor = torch.tensor([int_diff])
+            iat_tensor = torch.tensor([int_diff])
         else:
             diff = int(max(int_diff * 1000000, 0))
-            timestamp_bits = bin(diff)[2:]
+            iat_bits = bin(diff)[2:]
 
-            if len(timestamp_bits) < 32:
-                padding = 32 - len(timestamp_bits)
-                timestamp_bits = timestamp_bits + "0" * padding
-                timestamp_tensor = torch.tensor([int(bit) for bit in timestamp_bits])
+            if len(iat_bits) < 32:
+                padding = 32 - len(iat_bits)
+                iat_bits = iat_bits + "0" * padding
+                iat_tensor = torch.tensor([int(bit) for bit in iat_bits])
 
-        return timestamp_tensor
+        return iat_tensor
 
     def _extract_mac_address(self):
         if self.packet.haslayer(scapy.Ether):
@@ -103,7 +103,7 @@ class FeatureRepresentation:
         self.packet = packet
         self.prev_packet = prev_packet
         try:
-            timestamp_tensor = self._extract_timestamp()
+            iat_tensor = self._extract_iat()
             mac_tensor = self._extract_mac_address()
             ip_tensor = self._extract_ip_address()
             port_tensor = self._extract_port()
@@ -111,7 +111,7 @@ class FeatureRepresentation:
 
             packet_tensor = torch.cat(
                 (
-                    timestamp_tensor,
+                    iat_tensor,
                     mac_tensor,
                     ip_tensor,
                     port_tensor,
@@ -137,7 +137,7 @@ class FeatureRepresentation:
         self.packet = packet
         self.prev_packet = prev_packet
         try:
-            timestamp_tensor = self._extract_timestamp(get_integer=True)
+            iat_tensor = self._extract_iat(get_integer=True)
             self._extract_mac_address()
             self._extract_ip_address()
             self._extract_port()
@@ -145,7 +145,7 @@ class FeatureRepresentation:
 
             packet_tensor = torch.cat(
                 (
-                    timestamp_tensor,
+                    iat_tensor,
                     # mac_tensor,
                     # ip_tensor,
                     # port_tensor,
