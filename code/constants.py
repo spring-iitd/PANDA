@@ -7,8 +7,8 @@ MAX_BITS_SIZE = 11
 PACKET_LENGTH = 235
 
 benign_data = [
-    "../data/benign/weekday_100k.pcap",
-    # "../data/benign/weekday_06.pcap",
+    # "../data/benign/weekday_100k.pcap",
+    "../data/benign/weekday_06.pcap",
 ]
 
 malicious_data = [

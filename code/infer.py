@@ -1,8 +1,13 @@
 import sys
+import time
 
+import numpy as np
 import torch
 import torch.nn as nn
 from constants import merged_data
+from datasets import *  # noqa
+from feature_extractor import net_stat as ns
+from models import *  # noqa
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from utils import save
@@ -18,26 +23,57 @@ def get_threshold(args, model, criterion):
     dataset = eval(model.dataset)(
         pcap_file=args.traindata_file, max_iterations=sys.maxsize, transform=transform
     )
+    if not model.raw:
+        batch_size = model.input_dim * args.batch_size
+    else:
+        batch_size = args.batch_size
     dataloader = DataLoader(
         dataset,
-        batch_size=model.input_dim * args.batch_size,
+        batch_size=batch_size,
         shuffle=False,
         drop_last=True,
     )
 
     reconstruction_errors = []
+    maxHost = 100000000000
+    maxSess = 100000000000
+    nstat = ns.netStat(np.nan, maxHost, maxSess)
 
-    for packets in dataloader:
-        reshaped_packets = packets.reshape(
-            args.batch_size, 1, model.input_dim, model.input_dim
-        ).to(torch.float)
+    for packet in dataloader:
+        if model.raw:
+            x = nstat.updateGetStats(
+                packet["IPtype"].item(),
+                packet["srcMAC"][0],
+                packet["dstMAC"][0],
+                packet["srcIP"][0],
+                packet["srcproto"][0],
+                packet["dstIP"][0],
+                packet["dstproto"][0],
+                int(packet["framelen"]),
+                float(packet["timestamp"]),
+            )
+            # concatenate with the tensors
+            reshaped_packets = torch.cat(
+                (packet["packet_tensor"][0], torch.tensor(x))
+            ).to(torch.float)
+        else:
+            reshaped_packets = packet.reshape(
+                (batch_size // model.input_dim),
+                1,
+                model.input_dim,
+                model.input_dim,
+            ).to(torch.float)
+
+        # Move the data to the device that is being used
+        model = model.to(args.device)
+        reshaped_packets = reshaped_packets.to(args.device)
         outputs = model(reshaped_packets)
 
         # Compute the loss
         loss = criterion(outputs, reshaped_packets)
         reconstruction_errors.append(loss.data)
 
-    # finding the 95th percentile of the reconstruction error distribution for threshold
+    # finding the 90th percentile of the reconstruction error distribution for threshold
     reconstruction_errors.sort(reverse=True)
     ninety_fifth_percentile_index = int(0.90 * len(reconstruction_errors))
     threshold = reconstruction_errors[ninety_fifth_percentile_index]
@@ -76,32 +112,79 @@ def infer(args):
             "Neither any threshold provided or the get-threshold flag is set!!! Overriding to calculating threshold"
         )
         threshold = -1 * get_threshold(args, model, criterion)
+    if model.raw and args.threshold is None:
+        threshold = get_threshold(args, model, criterion)
+    if model.raw and args.threshold is not None:
+        threshold = args.threshold
     print(f"Threshold for the Anomaly Detector: {threshold}!!!")
 
+    if not model.raw:
+        args.batch_size = model.input_dim * args.batch_size
     y_true, y_pred = [], []
     for pcap_path in merged_data:
         # Create the DataLoader
+        print(f"Processing {pcap_path}!!!")
         dataset = eval(model.dataset)(
             pcap_file=pcap_path, max_iterations=sys.maxsize, transform=transform
         )
+
         dataloader = DataLoader(
             dataset,
-            batch_size=model.input_dim * args.batch_size,
+            batch_size=args.batch_size,
             shuffle=False,
             drop_last=True,
         )
 
         anomaly_scores = []
+        maxHost = 100000000000
+        maxSess = 100000000000
+        nstat = ns.netStat(np.nan, maxHost, maxSess)
 
-        for packets in dataloader:
-            reshaped_packets = packets.reshape(
-                args.batch_size, 1, model.input_dim, model.input_dim
-            ).to(torch.float)
+        for packet in dataloader:
+            start = time.time()
+            if model.raw:
+                tensors = []
+                for j in range(len(packet["IPtype"])):
+                    x = nstat.updateGetStats(
+                        packet["IPtype"][j].item(),
+                        packet["srcMAC"][j],
+                        packet["dstMAC"][j],
+                        packet["srcIP"][j],
+                        packet["srcproto"][j],
+                        packet["dstIP"][j],
+                        packet["dstproto"][j],
+                        int(packet["framelen"][j]),
+                        float(packet["timestamp"][j]),
+                    )
+                    tensors.append(torch.tensor(x))
+                # concatenate with the tensors
+                reshaped_packets = torch.cat(
+                    (packet["packet_tensor"], torch.stack(tensors)), dim=1
+                ).to(torch.float)
+            else:
+                reshaped_packets = packet.reshape(
+                    (args.batch_size // model.input_dim),
+                    1,
+                    model.input_dim,
+                    model.input_dim,
+                ).to(torch.float)
+
+            # Move the data to the device that is being used
+            model = model.to(args.device)
+            reshaped_packets = reshaped_packets.to(args.device)
+
+            # # print model and reshaped packets devices
+            # print(f"Model device: {next(model.parameters()).device}")
+            # print(f"Reshaped packets device: {reshaped_packets.device}")
+
             outputs = model(reshaped_packets)
 
             # Compute the loss
             loss = criterion(outputs, reshaped_packets)
-            anomaly_score = -1 * loss.data
+            if model.raw:
+                anomaly_score = loss.data
+            else:
+                anomaly_score = -1 * loss.data
             anomaly_scores.append(anomaly_score)
 
             y_true.append(1 if "malicious" in pcap_path else 0)
@@ -111,6 +194,16 @@ def infer(args):
         print(
             f"Average anomaly score for {pcap_path.split('/')[-1]} is: {avg_anomaly_score}"
         )
+
+        # print time taken to process the pcap file upto 4 decimal places with units
+        end = time.time()
+        time_taken = end - start
+        if time_taken < 60:
+            print(f"Time taken: {time_taken:.4f} seconds")
+        elif time_taken < 3600:
+            print(f"Time taken: {time_taken/60:.4f} minutes")
+        else:
+            print(f"Time taken: {time_taken/3600:.4f} hours")
 
     # save y_true, y_pred, and anomaly_scores as corresponding objects
     save(

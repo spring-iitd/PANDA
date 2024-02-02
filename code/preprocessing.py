@@ -1,3 +1,4 @@
+import numpy as np
 import scapy.all as scapy
 import torch
 from constants import MAX_BITS_PORT
@@ -9,23 +10,23 @@ class FeatureRepresentation:
         self.packet = None
         self.prev_packet = None
 
-    def _extract_timestamp(self, get_integer=False):
+    def _extract_iat(self, get_integer=False):
         current_time = float(self.packet.time)
         prev_time = float(self.prev_packet.time)
         int_diff = current_time - prev_time
 
         if get_integer:
-            timestamp_tensor = torch.tensor([int_diff])
+            iat_tensor = torch.tensor([int_diff])
         else:
             diff = int(max(int_diff * 1000000, 0))
-            timestamp_bits = bin(diff)[2:]
+            iat_bits = bin(diff)[2:]
 
-            if len(timestamp_bits) < 32:
-                padding = 32 - len(timestamp_bits)
-                timestamp_bits = timestamp_bits + "0" * padding
-                timestamp_tensor = torch.tensor([int(bit) for bit in timestamp_bits])
+            if len(iat_bits) < 32:
+                padding = 32 - len(iat_bits)
+                iat_bits = iat_bits + "0" * padding
+                iat_tensor = torch.tensor([int(bit) for bit in iat_bits])
 
-        return timestamp_tensor
+        return iat_tensor
 
     def _extract_mac_address(self):
         if self.packet.haslayer(scapy.Ether):
@@ -102,7 +103,7 @@ class FeatureRepresentation:
         self.packet = packet
         self.prev_packet = prev_packet
         try:
-            timestamp_tensor = self._extract_timestamp()
+            iat_tensor = self._extract_iat()
             mac_tensor = self._extract_mac_address()
             ip_tensor = self._extract_ip_address()
             port_tensor = self._extract_port()
@@ -110,7 +111,7 @@ class FeatureRepresentation:
 
             packet_tensor = torch.cat(
                 (
-                    timestamp_tensor,
+                    iat_tensor,
                     mac_tensor,
                     ip_tensor,
                     port_tensor,
@@ -136,18 +137,18 @@ class FeatureRepresentation:
         self.packet = packet
         self.prev_packet = prev_packet
         try:
-            timestamp_tensor = self._extract_timestamp(get_integer=True)
-            mac_tensor = self._extract_mac_address()
-            ip_tensor = self._extract_ip_address()
-            port_tensor = self._extract_port()
+            iat_tensor = self._extract_iat(get_integer=True)
+            self._extract_mac_address()
+            self._extract_ip_address()
+            self._extract_port()
             packet_size_tensor = self._extract_packet_size(get_integer=True)
 
             packet_tensor = torch.cat(
                 (
-                    timestamp_tensor,
-                    mac_tensor,
-                    ip_tensor,
-                    port_tensor,
+                    iat_tensor,
+                    # mac_tensor,
+                    # ip_tensor,
+                    # port_tensor,
                     packet_size_tensor,
                 )
             )
@@ -157,3 +158,49 @@ class FeatureRepresentation:
         except Exception as e:
             print(f"Exception occured: {e}")
             return None
+
+
+def packet_parser(packet):
+    IPtype = np.nan
+    timestamp = packet.time
+    framelen = len(packet)
+    if packet.haslayer(scapy.IP):  # IPv4
+        srcIP = packet[scapy.IP].src
+        dstIP = packet[scapy.IP].dst
+        IPtype = 0
+    elif packet.haslayer(scapy.IPv6):  # ipv6
+        srcIP = packet[scapy.IPv6].src
+        dstIP = packet[scapy.IPv6].dst
+        IPtype = 1
+    else:
+        srcIP = ""
+        dstIP = ""
+
+    if packet.haslayer(scapy.TCP):
+        srcproto = str(packet[scapy.TCP].sport)
+        dstproto = str(packet[scapy.TCP].dport)
+    elif packet.haslayer(scapy.UDP):
+        srcproto = str(packet[scapy.UDP].sport)
+        dstproto = str(packet[scapy.UDP].dport)
+    else:
+        srcproto = ""
+        dstproto = ""
+
+    srcMAC = packet.src
+    dstMAC = packet.dst
+    if srcproto == "":  # it's a L2/L1 level protocol
+        if packet.haslayer(scapy.ARP):  # is ARP
+            srcproto = "arp"
+            dstproto = "arp"
+            srcIP = packet[scapy.ARP].psrc  # src IP (ARP)
+            dstIP = packet[scapy.ARP].pdst  # dst IP (ARP)
+            IPtype = 0
+        elif packet.haslayer(scapy.ICMP):  # is ICMP
+            srcproto = "icmp"
+            dstproto = "icmp"
+            IPtype = 0
+        elif srcIP + srcproto + dstIP + dstproto == "":  # some other protocol
+            srcIP = packet.src  # src MAC
+            dstIP = packet.dst  # dst MAC
+
+    return IPtype, srcMAC, dstMAC, srcIP, srcproto, dstIP, dstproto, framelen, timestamp

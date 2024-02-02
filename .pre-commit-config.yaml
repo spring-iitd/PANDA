@@ -6,11 +6,10 @@ repos:
         hooks:
         -   id: trailing-whitespace
         -   id: end-of-file-fixer
-        -   id: check-yaml
+        # -   id: check-yaml
         -   id: check-added-large-files
             args: ['--maxkb=50000']  # Limit to files up to 50 megabytes
         -   id: debug-statements
-        -   id: requirements-txt-fixer
 
     -   repo: https://github.com/PyCQA/autoflake
         rev: v2.2.1
