@@ -278,7 +278,7 @@ class Attack:
                 loss = self.criterion(reconstructed_output, adversarial_packets)
 
                 # TODO: If evading break #absolute
-                if loss < 7765.8345:
+                if loss < 765.8345:
                     # print("Loss of malicious file less than the threshold, Evaded!!!")
                     break
 
@@ -291,7 +291,8 @@ class Attack:
                     adversarial_packets
                     + delta
                 )
-                adversarial_timestamp = adversarial_timestamp + delta[0].item()
+                denormalised_delta = delta[0].item() * (1 - 0.00001) + 0.00001
+                adversarial_timestamp = adversarial_timestamp + denormalised_delta
                 denormalized_adv_size = denormalize_packet_size(adversarial_packets[1].item())
 
                 # adjust other features according to the modified timestamp
@@ -327,7 +328,9 @@ class Attack:
             adv_loss = self.criterion(adv_outputs, adversarial_packets)
             adv_anomaly_score = adv_loss.data
             y_true.append(1 if "malicious" in self.pcap_path else 0)
-            y_pred.append(1 if adv_anomaly_score > 7765.8345 else 0)
+            # TODO: If evading break #absolute
+            # y_pred.append(1 if adv_anomaly_score > 7765.8345 else 0)
+            y_pred.append(1 if adv_anomaly_score > 765.8345 else 0)
 
             adv_re.append(adv_loss.data)
 

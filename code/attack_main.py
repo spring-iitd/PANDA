@@ -39,9 +39,16 @@ def update_timestamps_raw(pcap_file, adv_timestamps, adv_pcap_path):
     dropped because last batch doesn't form an image.
     """
     packets = scapy.rdpcap(pcap_file)
+    print("Original timestamp of 5th packet:", packets[5].time)
+    print("Expected new timestamp of 5th packet:", adv_timestamps[5])
+    same = 0
     for i, packet in enumerate(packets):
+        if packet.time == adv_timestamps[i]:
+            same += 1
         packet.time = adv_timestamps[i]
-
+    
+    print("Number of same timestamps:", same, "out of", i)
+    print("Updated timestamp of 5th packet:", packets[5].time)
     scapy.wrpcap(adv_pcap_path, packets)
 
 
@@ -95,7 +102,7 @@ def main(args):
     )
     attack = Attack(args=args)
     attack_method = getattr(attack, args.attack)
-    re, adv_re, y_true, y_pred, taus, adv_timestamps, adv_sizes, actual_sizes = attack_method(epsilon=0.01)
+    re, adv_re, y_true, y_pred, taus, adv_timestamps, adv_sizes, actual_sizes = attack_method(epsilon=0.05)
 
     print(f"Pcap file: {args.pcap_path.split('/')[-1][:-5]}")
     print(f"Mean RE for malicious packets: {sum(re)/ len(re)}")
@@ -116,8 +123,8 @@ def main(args):
         update_timestamps(args.pcap_path, taus, args.adv_pcap_path)
 
     # Plot the reconstruction error curve
-    re = [np.array(elem.to("cpu")) for elem in re]
-    adv_re = [np.array(elem.to("cpu")) for elem in adv_re]
+    re = [np.array(elem.to("cpu")) for elem in re][20:100]
+    adv_re = [np.array(elem.to("cpu")) for elem in adv_re][20:100]
 
     # Generate x-axis values (image indices)
     image_indices = np.arange(len(re))
@@ -137,7 +144,8 @@ def main(args):
         color="r",
         label="Advesarial Data",
     )
-    plt.axhline(y=0.2661, color="green", linestyle="--", label="Threshold")
+    # TODO: #absolute value for threshold. REMOVE!!!!
+    plt.axhline(y=765.83, color="green", linestyle="--", label="Threshold")
     plt.title(
         f"Reconstruction Error Curve: {args.pcap_path.split('/')[-1][:-5]}_{args.attack}"
     )

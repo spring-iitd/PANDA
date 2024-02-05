@@ -15,8 +15,13 @@ class FeatureRepresentation:
         prev_time = float(self.prev_packet.time)
         int_diff = current_time - prev_time
 
+        # Define your min and max IAT values
+        min_iat = 0.00001
+        max_iat = 1.0  # Adjust this value based on your specific context
+
         if get_integer:
             iat_tensor = torch.tensor([int_diff])
+            iat_tensor = (iat_tensor - min_iat) / (max_iat - min_iat)
         else:
             diff = int(max(int_diff * 1000000, 0))
             iat_bits = bin(diff)[2:]
