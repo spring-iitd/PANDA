@@ -1,15 +1,16 @@
 import sys
 import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn as nn
 from constants import merged_data
 from datasets import *  # noqa
 from feature_extractor import net_stat as ns
 from models import *  # noqa
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from train import RMSELoss  # noqa
 from utils import save
 
 
@@ -100,7 +101,8 @@ def infer(args):
         ]
     )
 
-    criterion = getattr(nn, args.loss)()
+    # criterion = getattr(nn, args.loss)()
+    criterion = eval(args.loss)()
 
     # get threshold
     if args.threshold is not None:
@@ -140,8 +142,8 @@ def infer(args):
         maxSess = 100000000000
         nstat = ns.netStat(np.nan, maxHost, maxSess)
 
+        start = time.time()
         for packet in dataloader:
-            start = time.time()
             if model.raw:
                 tensors = []
                 for j in range(len(packet["IPtype"])):
@@ -204,6 +206,34 @@ def infer(args):
             print(f"Time taken: {time_taken/60:.4f} minutes")
         else:
             print(f"Time taken: {time_taken/3600:.4f} hours")
+
+        image_indices = np.arange(len(anomaly_scores))
+
+        # Create a line curve (line plot)
+        plt.figure(figsize=(10, 6))
+        plt.plot(
+            image_indices,
+            anomaly_scores,
+            marker="o",
+            linestyle="-",
+            color="b",
+            label="Clean Data",
+        )
+
+        # TODO: #absolute value for threshold. REMOVE!!!!
+        plt.axhline(y=threshold, color="green", linestyle="--", label="Threshold")
+        plt.title(
+            f"Log RMSE Reconstruction Error Curve: {pcap_path.split('/')[-1][:-5]}"
+        )
+        plt.xlabel("Image Index")
+        plt.ylabel("Log RMSE Reconstruction Error")
+
+        # Add legend
+        plt.legend()
+        plt.grid(True)
+
+        # Show or save the plot
+        plt.savefig(f"../artifacts/plots/{pcap_path.split('/')[-1][:-5]}_re.png")
 
     # save y_true, y_pred, and anomaly_scores as corresponding objects
     save(

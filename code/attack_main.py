@@ -6,7 +6,6 @@ import scapy.all as scapy
 import torch.nn as nn
 from attacks import Attack
 
-from utils import save
 
 def update_timestamps(pcap_file, inter_arrival_times, adv_pcap_path):
     """
@@ -28,7 +27,18 @@ def update_timestamps(pcap_file, inter_arrival_times, adv_pcap_path):
 
         packet.time = new_timestamp
 
+    packets.sort(key=lambda packet: packet.time)
+
+    increment = 0.0001
+    for i in range(1, len(packets)):
+        if packets[i].time <= packets[i - 1].time:
+            packets[i].time = packets[i].time + increment
+            increment += 0.0001
+        else:
+            increment = 0.0001
+
     scapy.wrpcap(adv_pcap_path, packets)
+
 
 def update_timestamps_raw(pcap_file, adv_timestamps, adv_pcap_path):
     """
@@ -46,9 +56,11 @@ def update_timestamps_raw(pcap_file, adv_timestamps, adv_pcap_path):
         if packet.time == adv_timestamps[i]:
             same += 1
         packet.time = adv_timestamps[i]
-    
+
     print("Number of same timestamps:", same, "out of", i)
     print("Updated timestamp of 5th packet:", packets[5].time)
+
+    packets.sort(key=lambda packet: packet.time)
     scapy.wrpcap(adv_pcap_path, packets)
 
 
@@ -84,7 +96,9 @@ def get_args_parser():
         type=str,
         help="Name of the attack to perform or inference",
     )
-    parser.add_argument("--selected-columns", nargs="+", default=list(range(32)), type=list)
+    parser.add_argument(
+        "--selected-columns", nargs="+", default=list(range(32)), type=list
+    )
     parser.add_argument(
         "--eval", action="store_true", default=False, help="perform attack inference"
     )
@@ -100,18 +114,33 @@ def main(args):
     args.adv_pcap_path = (
         f"../data/adversarial/{args.attack}/Adv_{args.pcap_path.split('/')[-1]}"
     )
+
     attack = Attack(args=args)
     attack_method = getattr(attack, args.attack)
-    re, adv_re, y_true, y_pred, taus, adv_timestamps, adv_sizes, actual_sizes = attack_method(epsilon=0.05)
+
+    # below line is for loopback
+    (
+        re,
+        adv_re,
+        y_true,
+        y_pred,
+        taus,
+        adv_timestamps,
+        adv_sizes,
+        actual_sizes,
+    ) = attack_method(epsilon=0.5)
+
+    # below line is for others
+    re, adv_re, y_true, y_pred, taus = attack_method(epsilon=0.3)
 
     print(f"Pcap file: {args.pcap_path.split('/')[-1][:-5]}")
     print(f"Mean RE for malicious packets: {sum(re)/ len(re)}")
     print(f"Mean RE for adversarial malicious packets: {sum(adv_re)/ len(adv_re)}")
 
-    save(
-        path="../artifacts/objects/attacks/loopback_pgd/adv_sizes",
-        params={"adv_sizes": adv_sizes},
-    )
+    # save(
+    #     path="../artifacts/objects/attacks/loopback_pgd/adv_sizes",
+    #     params={"adv_sizes": adv_sizes},
+    # )
 
     evasion_rate = 1 - (sum(y_pred) / len(y_pred))
     print(f"Evasion Rate: {evasion_rate}")
@@ -128,7 +157,6 @@ def main(args):
 
     # Generate x-axis values (image indices)
     image_indices = np.arange(len(re))
-
 
     # Create a line curve (line plot)
     plt.figure(figsize=(10, 6))

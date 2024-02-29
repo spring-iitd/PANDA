@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import List
 
 import numpy as np
 import torch
@@ -8,8 +9,18 @@ import torch.optim as optim
 from datasets import *  # noqa
 from feature_extractor import net_stat as ns
 from models import *  # noqa
+from torch.nn import *  # noqa
 from torch.utils.data import DataLoader
 from torchvision import transforms
+
+
+class RMSELoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss()
+
+    def forward(self, yhat, y):
+        return torch.sqrt(self.mse(yhat, y))
 
 
 def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
@@ -21,7 +32,8 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
     maxHost = 100000000000
     maxSess = 100000000000
     nstat = ns.netStat(np.nan, maxHost, maxSess)
-
+    losses = []
+    datas = []
     for i, packet in enumerate(dataloader):
         running_loss = 0.0
         if model.raw:
@@ -43,6 +55,7 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
             reshaped_packets = torch.cat(
                 (packet["packet_tensor"], torch.stack(tensors)), dim=1
             ).to(torch.float)
+            # reshaped_packets = torch.stack(tensors).to(torch.float)
 
         else:
             reshaped_packets = packet.reshape(
@@ -52,15 +65,22 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
                 model.input_dim,
             ).to(torch.float)
 
+        # collect and store reshaped packet to create a csv
+        datas.append(reshaped_packets)
+
         # Move the data to the device that is being used
         model = model.to(args.device)
         reshaped_packets = reshaped_packets.to(args.device)
 
         # Forward pass
+        # outputs, tails = model(reshaped_packets)
         outputs = model(reshaped_packets)
 
         # Compute the loss: we're getting average loss over the batch here
-        loss = criterion(outputs, reshaped_packets)
+        loss = torch.log(criterion(outputs, reshaped_packets))
+        # loss = torch.log(criterion(outputs, tails))
+        losses.append(loss.item())
+        # print(f"Loss: {loss}")
 
         # Backpropagation and optimization
         optimizer.zero_grad()
@@ -74,10 +94,17 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
             avg_loss = running_loss / args.print_interval
             print(f"Epoch {(i+1)}/ {(epoch+1)} Average Loss: {avg_loss}")
 
-        # Calculate average loss for the epoch
-        avg_epoch_loss = running_loss / (i + 1)
+    # Save the reshaped packets to a csv
+    stacked_datas = torch.stack(datas)
+    reshaped_datas = stacked_datas.view(stacked_datas.shape[0], -1)
+    np_data = reshaped_datas.cpu().detach().numpy()
+    np.savetxt("../data/malicious/Port_Scanning_SmartTV.csv", np_data, delimiter=",")
+    # plt.plot(losses)
+    # plt.show()
+    # import pdb
 
-    return avg_epoch_loss
+    # pdb.set_trace()
+    return losses
 
 
 def trainer(args):
@@ -88,7 +115,8 @@ def trainer(args):
     model = eval(args.model_name)()
 
     # Define loss function (Binary Cross-Entropy Loss for binary data)
-    criterion = getattr(nn, args.loss)()
+    # criterion = getattr(nn, args.loss)()
+    criterion = eval(args.loss)()
 
     # Define optimizer
     optimizer = getattr(optim, args.optimizer)(model.parameters(), lr=args.lr)
@@ -123,10 +151,11 @@ def trainer(args):
         )
 
         # Train the model for one epoch
-        avg_epoch_loss = _train_one_epoch(
+        losses: List = _train_one_epoch(
             model, criterion, optimizer, dataloader, epoch, args
         )
 
+        avg_epoch_loss = sum(losses) / len(losses)
         # TODO: Add validation loop with early stopping here
 
         # Check if this is the best model so far
@@ -149,15 +178,4 @@ def trainer(args):
 
         print(f"Epoch {epoch+1} Average Loss: {avg_epoch_loss}")
 
-    # # Check if the folder exists, if not create it
-    # folder_path = f"../artifacts/models/{args.model_name}/"
-    # if not os.path.exists(folder_path):
-    #     os.makedirs(folder_path)
-
-    # # Define the file path for saving the best model
-    # # TODO: Add the epoch number to the file name and save an entire state dictionary
-    # file_path = os.path.join(folder_path, "model.pth")
-
-    # # Save the best trained model
-    # torch.save(best_model_state, file_path)
-    print(f"Best average reconstruction error over the entire dataset: {best_loss}")
+    print(f"Best average reconstruction error over all the epochs: {best_loss}")

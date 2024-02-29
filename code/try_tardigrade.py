@@ -1,10 +1,8 @@
 import sys
-from datasets import PcapDatasetRaw
+
 from constants import PCAP_PATH
-
+from datasets import PcapDatasetRaw
 from torch.utils.data import DataLoader
-
-PCAP_PATH = "../data/benign/weekday.pcap"
 
 dataset = PcapDatasetRaw(pcap_file=PCAP_PATH, max_iterations=sys.maxsize)
 

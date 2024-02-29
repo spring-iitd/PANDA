@@ -1,4 +1,15 @@
+import torch
 import torch.nn as nn
+from constants import kitsune_clusters
+
+
+class RMSELoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss()
+
+    def forward(self, yhat, y):
+        return torch.sqrt(self.mse(yhat, y))
 
 
 # Define the CNN Autoencoder architecture
@@ -97,3 +108,51 @@ class AutoencoderRaw(nn.Module):
         encoded = self.encoder(x)
         decoded = self.decoder(encoded)
         return decoded
+
+
+class BaseAutoencoder(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+        )
+        self.decoder = nn.Sequential(nn.Linear(hidden_size, input_size), nn.Sigmoid())
+
+    def forward(self, x):
+        # print(x.shape)
+        # print(self.encoder)
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+
+class KitsuneAutoencoder(nn.Module):
+    def __init__(self):
+        self.dataset = "PcapDatasetRaw"
+        self.input_dim = 100
+        self.raw = True
+        super().__init__()
+        self.tails = [BaseAutoencoder(len(c), len(c) // 2) for c in kitsune_clusters]
+        self.head = BaseAutoencoder(len(kitsune_clusters), len(kitsune_clusters) // 2)
+        self.rmse = RMSELoss()
+
+    def forward(self, x):
+        # cluster x by using index from clusters
+        x = x.view(-1, 100)
+        # print(f"Before clustering: {x}")
+        # x_clusters = [torch.index_select(x, 1, torch.tensor(c)) for c in clusters]
+        x_clusters = [
+            torch.index_select(x, 1, torch.tensor(c)) for c in kitsune_clusters
+        ]
+
+        tails = []
+        for tail, c in zip(self.tails, x_clusters):
+            output = tail(c)
+            loss = torch.log(self.rmse(output, c))
+            tails.append(loss)
+
+        # print(tails)
+        tails = torch.stack(tails)
+        x = self.head(tails)
+        return x, tails

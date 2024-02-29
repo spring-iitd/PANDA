@@ -1,20 +1,28 @@
 import sys
 
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
+from datasets import *  # noqa
+from feature_extractor import net_stat as ns
+from models import *  # noqa
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from feature_extractor import net_stat as ns
-
-from datasets import *  # noqa
-from models import *  # noqa
 
 transform = transforms.Compose(
     [
         # Add any desired transformations here
     ]
 )
+
+
+class RMSELoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss()
+
+    def forward(self, yhat, y):
+        return torch.sqrt(self.mse(yhat, y))
 
 
 def get_timegaps(packet):
@@ -27,12 +35,14 @@ def get_timegaps(packet):
 
     return integer_values, sum(integer_values)
 
+
 def denormalize_packet_size(normalized_size):
     min_size = 64  # minimum frame size
     max_size = 1518  # maximum frame size
 
     packet_size = normalized_size * (max_size - min_size) + min_size
     return packet_size
+
 
 class Attack:
     def __init__(self, args):
@@ -202,18 +212,20 @@ class Attack:
         print(f"Total time: {total_time}, Adv: {adv_total_time}")
 
         return re, adv_re, y_true, y_pred, taus
-        
+
     def loopback_pgd(self, epsilon):
         # The attack is designed for one packet at a time
         # Define the PGD attack parameters
         num_steps = 10
-        self.criterion = nn.MSELoss()
+        self.criterion = RMSELoss()
+
+        print(f"Attacking {self.pcap_path}")
 
         # creating mask for the timestamp and size
         # TODO: #absolute mask (make it diff for different attacks)
         self.mask = torch.zeros(self.model.input_dim).to(self.device)
         self.mask[0] = 1
-        self.mask[1] = 1
+        # self.mask[1] = 1
 
         dataset = eval(self.model.dataset)(
             pcap_file=self.pcap_path, max_iterations=sys.maxsize, transform=transform
@@ -240,9 +252,17 @@ class Attack:
         maxHost = 100000000000
         maxSess = 100000000000
         nstat = ns.netStat(np.nan, maxHost, maxSess)
+        import time
+
+        data = []
+        import pandas as pd
 
         for packet in dataloader:
+            time.time()
             total_time = total_time + packet["packet_tensor"][0][0].item()
+
+            # updating the previous stats to till packet i-1
+            nstat.updatePreviousStats()
 
             # Get the clean input
             x = nstat.updateGetStats(
@@ -256,10 +276,14 @@ class Attack:
                 int(packet["framelen"]),
                 float(packet["timestamp"]),
             )
+            # collect x and form a df
+            data.append(x)
             # concatenate with the tensors
-            reshaped_packets = torch.cat(
-                (packet["packet_tensor"][0], torch.tensor(x))
-            ).to(torch.float).to(self.device)
+            reshaped_packets = (
+                torch.cat((packet["packet_tensor"][0], torch.tensor(x)))
+                .to(torch.float)
+                .to(self.device)
+            )
             reshaped_packets.requires_grad = True
             # Generate the adversarial example
             adversarial_packets = reshaped_packets.clone().detach()
@@ -267,7 +291,7 @@ class Attack:
 
             # clean loss
             outputs = self.model(reshaped_packets)
-            clean_loss = self.criterion(outputs, reshaped_packets)
+            clean_loss = torch.log(self.criterion(outputs, reshaped_packets))
             adversarial_timestamp = float(packet["timestamp"])
             denormalized_adv_size = int(packet["framelen"])
             for _ in range(num_steps):
@@ -275,10 +299,12 @@ class Attack:
                 reconstructed_output = self.model(adversarial_packets)
 
                 # Compute the loss
-                loss = self.criterion(reconstructed_output, adversarial_packets)
+                loss = torch.log(
+                    self.criterion(reconstructed_output, adversarial_packets)
+                )
 
                 # TODO: If evading break #absolute
-                if loss < 765.8345:
+                if loss < 4.4787:
                     # print("Loss of malicious file less than the threshold, Evaded!!!")
                     break
 
@@ -287,22 +313,19 @@ class Attack:
                 loss.backward()
 
                 delta = epsilon * torch.sign(adversarial_packets.grad.data) * self.mask
-                adversarial_packets.data = (
-                    adversarial_packets
-                    + delta
-                )
+                adversarial_packets.data = adversarial_packets + delta
+                # TODO: #absolute
                 denormalised_delta = delta[0].item() * (1 - 0.00001) + 0.00001
                 adversarial_timestamp = adversarial_timestamp + denormalised_delta
-                denormalized_adv_size = denormalize_packet_size(adversarial_packets[1].item())
+                denormalized_adv_size = denormalize_packet_size(
+                    adversarial_packets[1].item()
+                )
 
                 # adjust other features according to the modified timestamp
                 # step 1: revert the nstat update
                 nstat.revertUpdate()
 
                 # step 2: update the nstat with the new timestamp
-                # TODO: Here the size is normalised value, we need
-                # to revert it back to the original size and then
-                # pass it to the updateGetStats function
                 x = nstat.updateGetStats(
                     packet["IPtype"].item(),
                     packet["srcMAC"][0],
@@ -311,26 +334,30 @@ class Attack:
                     packet["srcproto"][0],
                     packet["dstIP"][0],
                     packet["dstproto"][0],
-                    denormalized_adv_size,
-                    # int(packet["framelen"]),
+                    # denormalized_adv_size,
+                    int(packet["framelen"]),
                     adversarial_timestamp,
                 )
 
                 # step 3: concatenate with the tensors
-                adversarial_packets = torch.cat(
-                    (adversarial_packets[0:2].detach().cpu(), torch.tensor(x))
-                ).to(torch.float).to(self.device)
+                adversarial_packets = (
+                    torch.cat(
+                        (adversarial_packets[0:2].detach().cpu(), torch.tensor(x))
+                    )
+                    .to(torch.float)
+                    .to(self.device)
+                )
 
                 adversarial_packets.requires_grad = True
 
             re.append(clean_loss.data)
             adv_outputs = self.model(adversarial_packets)
-            adv_loss = self.criterion(adv_outputs, adversarial_packets)
+            adv_loss = torch.log(self.criterion(adv_outputs, adversarial_packets))
             adv_anomaly_score = adv_loss.data
             y_true.append(1 if "malicious" in self.pcap_path else 0)
             # TODO: If evading break #absolute
             # y_pred.append(1 if adv_anomaly_score > 7765.8345 else 0)
-            y_pred.append(1 if adv_anomaly_score > 765.8345 else 0)
+            y_pred.append(1 if adv_anomaly_score > 4.4787 else 0)
 
             adv_re.append(adv_loss.data)
 
@@ -342,6 +369,9 @@ class Attack:
             actual_sizes.append(packet["framelen"])
             adv_sizes.append(denormalized_adv_size)
 
+            # print(f"Time taken for packet: {time.time() - start}")
+
+        pd.DataFrame(data)
         print(f"Total time: {total_time}, Adv: {adv_total_time}")
         print(f"Actual sizes: {sum(actual_sizes).item()}, Adv sizes: {sum(adv_sizes)}")
 
