@@ -50,7 +50,6 @@ class Attack:
         self.model.load_state_dict(
             torch.load(f"../artifacts/models/{args.surrogate_model}/model.pth")
         )
-        # self.model_path = args.root_dir + "artifacts/models/AutoencoderInt/" + args.surrogate_model + ".pth"
         self.batch_size = args.batch_size
         self.pcap_path = args.pcap_path
         self.device = args.device
@@ -62,6 +61,7 @@ class Attack:
             self.device
         )
         self.mask[:, args.selected_columns] = 1
+        self.threshold = args.threshold
 
     def fgsm(self, epsilon):
         dataset = eval(self.model.dataset)(
@@ -216,7 +216,7 @@ class Attack:
     def loopback_pgd(self, epsilon):
         # The attack is designed for one packet at a time
         # Define the PGD attack parameters
-        num_steps = 10
+        num_steps = 5
         self.criterion = RMSELoss()
 
         print(f"Attacking {self.pcap_path}")
@@ -252,18 +252,43 @@ class Attack:
         maxHost = 100000000000
         maxSess = 100000000000
         nstat = ns.netStat(np.nan, maxHost, maxSess)
+        ns.netStat(np.nan, maxHost, maxSess)
         import time
 
-        data = []
-        import pandas as pd
+        # data = []
 
         for packet in dataloader:
             time.time()
             total_time = total_time + packet["packet_tensor"][0][0].item()
 
             # updating the previous stats to till packet i-1
-            nstat.updatePreviousStats()
+            # if the current packet is a malicious packet
+            # x_alias = nstat_alias.updateGetStats(
+            #     packet["IPtype"].item(),
+            #     packet["srcMAC"][0],
+            #     packet["dstMAC"][0],
+            #     packet["srcIP"][0],
+            #     packet["srcproto"][0],
+            #     packet["dstIP"][0],
+            #     packet["dstproto"][0],
+            #     int(packet["framelen"]),
+            #     float(packet["timestamp"]),
+            # )
+            # reshaped_packets_alias = (
+            #     torch.cat((packet["packet_tensor"][0], torch.tensor(x_alias)))
+            #     .to(torch.float)
+            #     .to(self.device)
+            # )
+            # outputs_alias, tails_alias = self.model(reshaped_packets_alias)
+            # clean_loss_alias = torch.log(self.criterion(outputs_alias, tails_alias))
+            # if clean_loss_alias < self.threshold:
+            #     # print("Loss of malicious file less than the threshold, Evaded!!!")
+            #     continue
+            # else:
+            #     # print("Loss of malicious file greater than the threshold, Attacking!!!")
+            #     nstat.updatePreviousStats()
 
+            nstat.updatePreviousStats()
             # Get the clean input
             x = nstat.updateGetStats(
                 packet["IPtype"].item(),
@@ -277,7 +302,7 @@ class Attack:
                 float(packet["timestamp"]),
             )
             # collect x and form a df
-            data.append(x)
+            # data.append(x)
             # concatenate with the tensors
             reshaped_packets = (
                 torch.cat((packet["packet_tensor"][0], torch.tensor(x)))
@@ -290,22 +315,35 @@ class Attack:
             adversarial_packets.requires_grad = True
 
             # clean loss
-            outputs = self.model(reshaped_packets)
-            clean_loss = torch.log(self.criterion(outputs, reshaped_packets))
+            # below line is for regular models
+            # outputs = self.model(reshaped_packets)
+            # clean_loss = self.criterion(outputs, reshaped_packets)
+
+            # below line is for loopback pgd
+            outputs, tails = self.model(reshaped_packets)
+            clean_loss = self.criterion(outputs, tails)
             adversarial_timestamp = float(packet["timestamp"])
             denormalized_adv_size = int(packet["framelen"])
             for _ in range(num_steps):
                 # Forward pass through the autoencoder
-                reconstructed_output = self.model(adversarial_packets)
+                # reconstructed_output = self.model(adversarial_packets)
+
+                # below line is for regular models
+                # reconstructed_output = self.model(adversarial_packets)
+                # loss = self.criterion(reconstructed_output, adversarial_packets)
+
+                # below line is for loopback pgd
+                reconstructed_output, tails = self.model(adversarial_packets)
+                loss = self.criterion(reconstructed_output, tails)
 
                 # Compute the loss
-                loss = torch.log(
-                    self.criterion(reconstructed_output, adversarial_packets)
-                )
+                # loss = torch.log(
+                #     self.criterion(reconstructed_output, adversarial_packets)
+                # )
 
                 # TODO: If evading break #absolute
-                if loss < 4.4787:
-                    # print("Loss of malicious file less than the threshold, Evaded!!!")
+                if loss < self.threshold:
+                    print("Loss of malicious file less than the threshold, Evaded!!!")
                     break
 
                 # Backward pass and gradient ascent
@@ -313,7 +351,7 @@ class Attack:
                 loss.backward()
 
                 delta = epsilon * torch.sign(adversarial_packets.grad.data) * self.mask
-                adversarial_packets.data = adversarial_packets + delta
+                adversarial_packets.data = adversarial_packets - delta
                 # TODO: #absolute
                 denormalised_delta = delta[0].item() * (1 - 0.00001) + 0.00001
                 adversarial_timestamp = adversarial_timestamp + denormalised_delta
@@ -351,8 +389,20 @@ class Attack:
                 adversarial_packets.requires_grad = True
 
             re.append(clean_loss.data)
-            adv_outputs = self.model(adversarial_packets)
-            adv_loss = torch.log(self.criterion(adv_outputs, adversarial_packets))
+            print(
+                f"Loss: {clean_loss.data}, Threshold: {self.threshold}, Adv Loss: {loss}"
+            )
+
+            # below line is for regular models
+            # adv_outputs = self.model(adversarial_packets)
+            # adv_loss = self.criterion(adv_outputs, adversarial_packets)
+
+            # below line is for loopback pgd
+            adv_outputs, tails = self.model(adversarial_packets)
+            adv_loss = self.criterion(adv_outputs, tails)
+
+            # adv_outputs = self.model(adversarial_packets)
+            # adv_loss = torch.log(self.criterion(adv_outputs, adversarial_packets))
             adv_anomaly_score = adv_loss.data
             y_true.append(1 if "malicious" in self.pcap_path else 0)
             # TODO: If evading break #absolute
@@ -371,8 +421,8 @@ class Attack:
 
             # print(f"Time taken for packet: {time.time() - start}")
 
-        pd.DataFrame(data)
+        # pd.DataFrame(data)
         print(f"Total time: {total_time}, Adv: {adv_total_time}")
-        print(f"Actual sizes: {sum(actual_sizes).item()}, Adv sizes: {sum(adv_sizes)}")
+        print(f"Actual sizes: {sum(actual_sizes)}, Adv sizes: {sum(adv_sizes)}")
 
         return re, adv_re, y_true, y_pred, taus, adv_timestamps, adv_sizes, actual_sizes

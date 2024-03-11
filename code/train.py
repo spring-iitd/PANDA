@@ -73,14 +73,14 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
         reshaped_packets = reshaped_packets.to(args.device)
 
         # Forward pass
-        # outputs, tails = model(reshaped_packets)
-        outputs = model(reshaped_packets)
+        # below line is for regular models
+        # outputs = model(reshaped_packets)
+        # loss = criterion(outputs, reshaped_packets)
 
-        # Compute the loss: we're getting average loss over the batch here
-        loss = torch.log(criterion(outputs, reshaped_packets))
-        # loss = torch.log(criterion(outputs, tails))
+        # below line is for loopback pgd
+        outputs, tails = model(reshaped_packets)
+        loss = torch.log(criterion(outputs, tails))  # average loss over the batch
         losses.append(loss.item())
-        # print(f"Loss: {loss}")
 
         # Backpropagation and optimization
         optimizer.zero_grad()
@@ -101,9 +101,7 @@ def _train_one_epoch(model, criterion, optimizer, dataloader, epoch, args):
     np.savetxt("../data/malicious/Port_Scanning_SmartTV.csv", np_data, delimiter=",")
     # plt.plot(losses)
     # plt.show()
-    # import pdb
 
-    # pdb.set_trace()
     return losses
 
 
@@ -115,7 +113,6 @@ def trainer(args):
     model = eval(args.model_name)()
 
     # Define loss function (Binary Cross-Entropy Loss for binary data)
-    # criterion = getattr(nn, args.loss)()
     criterion = eval(args.loss)()
 
     # Define optimizer

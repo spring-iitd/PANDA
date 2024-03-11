@@ -29,18 +29,16 @@ def get_args_parser():
         help="folder where all the code, data, and artifacts lie",
     )
     # model related arguments
-    parser.add_argument("--model-name", default="Autoencoder", type=str)
+    parser.add_argument("--model-name", default="CNNAutoencoder", type=str)
     parser.add_argument("--loss", default="RMSELoss", type=str)
     parser.add_argument("--optimizer", default="Adam", type=str)
     parser.add_argument("--lr", default=0.1, type=float)
 
     # training related arguments
-    parser.add_argument("--num-epochs", default=5, type=int)
+    parser.add_argument("--num-epochs", default=1, type=int)
     parser.add_argument("--print-interval", default=5, type=int)
     parser.add_argument("--batch-size", default=1, type=int)
-    parser.add_argument(
-        "--traindata-file", default="../data/malicious/Port_Scanning_SmartTV.pcap"
-    )
+    parser.add_argument("--traindata-file", default="../data/benign/weekday.pcap")
     # TODO: Incorporate traindata-len in the training loop (currently not used)
     parser.add_argument(
         "--traindata-len",
@@ -164,9 +162,9 @@ def main(args):
         print("Training the model!!!")
         trainer(args)
 
-    if not args.model_name == "AutoencoderRaw":
-        plot_recon(args)
-        print("Plotting the original and reconstructed images!!!")
+    # if not args.model_name == "AutoencoderRaw" or "KitNET":
+    #     plot_recon(args)
+    #     print("Plotting the original and reconstructed images!!!")
 
     print("Done!!!")
 
