@@ -3,13 +3,10 @@ import sys
 
 import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn
 from datasets import *  # noqa
 from infer import infer
 from models import *  # noqa
 from sklearn.metrics import precision_recall_fscore_support
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import roc_curve
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from train import trainer
@@ -21,6 +18,7 @@ transform = transforms.Compose(
     ]
 )
 
+
 def get_args_parser():
     parser = argparse.ArgumentParser(
         "PANDA: Model Training and Inference", add_help=False
@@ -31,16 +29,16 @@ def get_args_parser():
         help="folder where all the code, data, and artifacts lie",
     )
     # model related arguments
-    parser.add_argument("--model-name", default="Autoencoder", type=str)
-    parser.add_argument("--loss", default="BCELoss", type=str)
+    parser.add_argument("--model-name", default="CNNAutoencoder", type=str)
+    parser.add_argument("--loss", default="RMSELoss", type=str)
     parser.add_argument("--optimizer", default="Adam", type=str)
-    parser.add_argument("--lr", default=0.001, type=float)
+    parser.add_argument("--lr", default=0.1, type=float)
 
     # training related arguments
-    parser.add_argument("--num-epochs", default=30, type=int)
+    parser.add_argument("--num-epochs", default=1, type=int)
     parser.add_argument("--print-interval", default=5, type=int)
-    parser.add_argument("--batch-size", default=8, type=int)
-    parser.add_argument("--traindata-file", default="../data/benign/weekday_06.pcap")
+    parser.add_argument("--batch-size", default=1, type=int)
+    parser.add_argument("--traindata-file", default="../data/benign/weekday.pcap")
     # TODO: Incorporate traindata-len in the training loop (currently not used)
     parser.add_argument(
         "--traindata-len",
@@ -65,6 +63,7 @@ def get_args_parser():
     parser.add_argument("--threshold", type=float, help="threshold for the autoencoder")
 
     return parser
+
 
 def plot_recon(args):
     # Load the trained autoencoder model
@@ -148,24 +147,24 @@ def main(args):
         print("F1 score:", f1_score)
 
         # ROC and AUC
-        fpr, tpr, thresholds = roc_curve(y_true, y_pred)
-        plt.plot(fpr, tpr)
-        plt.xlabel("False Positive Rate")
-        plt.ylabel("True Positive Rate")
-        plt.title("ROC Curve")
+        # fpr, tpr, thresholds = roc_curve(y_true, y_pred)
+        # plt.plot(fpr, tpr)
+        # plt.xlabel("False Positive Rate")
+        # plt.ylabel("True Positive Rate")
+        # plt.title("ROC Curve")
 
-        auc_score = roc_auc_score(y_true, y_pred)
-        plt.text(0.5, 0.5, f"AUC score: {auc_score}", ha="center", va="center")
+        # auc_score = roc_auc_score(y_true, y_pred)
+        # plt.text(0.5, 0.5, f"AUC score: {auc_score}", ha="center", va="center")
 
-        plt.show()
+        # plt.show()
 
     else:
         print("Training the model!!!")
         trainer(args)
 
-    if not args.model_name == "AutoencoderRaw":
-        plot_recon(args)
-        print("Plotting the original and reconstructed images!!!")
+    # if not args.model_name == "AutoencoderRaw" or "KitNET":
+    #     plot_recon(args)
+    #     print("Plotting the original and reconstructed images!!!")
 
     print("Done!!!")
 

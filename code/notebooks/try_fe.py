@@ -90,7 +90,7 @@ nstat = ns.netStat(np.nan, maxHost, maxSess)
 
 print("Reading PCAP file ...")
 for packet in dataloader:
-    # print(packet)
+    nstat.updatePreviousStats()
     while True:
         x = nstat.updateGetStats(
             packet["IPtype"].item(),
@@ -113,8 +113,9 @@ for packet in dataloader:
             print("No Evade! Reverting...")
             nstat.revertUpdate()
             print("Reverted!")
-            packet[i].time = packet[i].time + 0000
-            print("Old time: " + str(timestamp) + " New time: " + str(packets[i].time))
+            print("Old time: " + str(packet["timestamp"].item()))
+            packet["timestamp"] = packet["timestamp"] + 0
+            print(" New time: " + str(packet["timestamp"].item()))
 
         n = int(input("Enter next packet sequence:"))
         if n == 1:

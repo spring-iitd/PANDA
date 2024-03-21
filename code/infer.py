@@ -1,15 +1,17 @@
 import sys
 import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn as nn
 from constants import merged_data
 from datasets import *  # noqa
 from feature_extractor import net_stat as ns
 from models import *  # noqa
+from torch.nn import *  # noqa
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from train import RMSELoss  # noqa
 from utils import save
 
 
@@ -38,8 +40,9 @@ def get_threshold(args, model, criterion):
     maxHost = 100000000000
     maxSess = 100000000000
     nstat = ns.netStat(np.nan, maxHost, maxSess)
+    args.print_interval = 100
 
-    for packet in dataloader:
+    for i, packet in enumerate(dataloader):
         if model.raw:
             x = nstat.updateGetStats(
                 packet["IPtype"].item(),
@@ -67,11 +70,17 @@ def get_threshold(args, model, criterion):
         # Move the data to the device that is being used
         model = model.to(args.device)
         reshaped_packets = reshaped_packets.to(args.device)
-        outputs = model(reshaped_packets)
+        # below line is for regular models
+        # outputs = model(reshaped_packets)
+        # loss = criterion(outputs, reshaped_packets)
 
-        # Compute the loss
-        loss = criterion(outputs, reshaped_packets)
+        # below line is for loopback pgd
+        outputs, tails = model(reshaped_packets)
+        loss = torch.log(criterion(outputs, tails))  # average loss over the batch
         reconstruction_errors.append(loss.data)
+
+        if (i + 1) % args.print_interval == 0:
+            print(f"Processed {i+1} for calculating threshold")
 
     # finding the 90th percentile of the reconstruction error distribution for threshold
     reconstruction_errors.sort(reverse=True)
@@ -100,18 +109,20 @@ def infer(args):
         ]
     )
 
-    criterion = getattr(nn, args.loss)()
+    # criterion = getattr(nn, args.loss)()
+    criterion = eval(args.loss)()
 
     # get threshold
-    if args.threshold is not None:
-        threshold = -1 * args.threshold
-    elif args.get_threshold:
-        threshold = -1 * get_threshold(args, model, criterion)
-    else:
-        print(
-            "Neither any threshold provided or the get-threshold flag is set!!! Overriding to calculating threshold"
-        )
-        threshold = -1 * get_threshold(args, model, criterion)
+    if not model.raw:
+        if args.threshold is not None:
+            threshold = -1 * args.threshold
+        elif args.get_threshold:
+            threshold = -1 * get_threshold(args, model, criterion)
+        else:
+            print(
+                "Neither any threshold provided or the get-threshold flag is set!!! Overriding to calculating threshold"
+            )
+            threshold = -1 * get_threshold(args, model, criterion)
     if model.raw and args.threshold is None:
         threshold = get_threshold(args, model, criterion)
     if model.raw and args.threshold is not None:
@@ -140,8 +151,8 @@ def infer(args):
         maxSess = 100000000000
         nstat = ns.netStat(np.nan, maxHost, maxSess)
 
+        start = time.time()
         for packet in dataloader:
-            start = time.time()
             if model.raw:
                 tensors = []
                 for j in range(len(packet["IPtype"])):
@@ -173,14 +184,14 @@ def infer(args):
             model = model.to(args.device)
             reshaped_packets = reshaped_packets.to(args.device)
 
-            # # print model and reshaped packets devices
-            # print(f"Model device: {next(model.parameters()).device}")
-            # print(f"Reshaped packets device: {reshaped_packets.device}")
+            # below line is for regular models
+            # outputs = model(reshaped_packets)
+            # loss = criterion(outputs, reshaped_packets)
 
-            outputs = model(reshaped_packets)
+            # below line is for loopback pgd
+            outputs, tails = model(reshaped_packets)
+            loss = criterion(outputs, tails)  # average loss over the batch
 
-            # Compute the loss
-            loss = criterion(outputs, reshaped_packets)
             if model.raw:
                 anomaly_score = loss.data
             else:
@@ -204,6 +215,25 @@ def infer(args):
             print(f"Time taken: {time_taken/60:.4f} minutes")
         else:
             print(f"Time taken: {time_taken/3600:.4f} hours")
+
+        _, ax1 = plt.subplots(constrained_layout=True, figsize=(10, 5), dpi=200)
+        x_val = np.arange(len(anomaly_scores))
+
+        try:
+            ax1.scatter(x_val, anomaly_scores, s=1, c="#00008B")
+        except Exception as e:
+            print(f"Error: {e}")
+            ax1.scatter(x_val, anomaly_scores, s=1, alpha=1.0, c="#FF8C00")
+
+        ax1.axhline(y=threshold, color="r", linestyle="-")
+        ax1.set_yscale("log")
+        ax1.set_title("Anomaly Scores from Kitsune Execution Phase")
+        ax1.set_ylabel("RMSE (log scaled)")
+        ax1.set_xlabel("Packet index")
+
+        # Show or save the plot
+        plt.savefig(f"../artifacts/plots/{pcap_path.split('/')[-1][:-5]}_re.png")
+        plt.close()
 
     # save y_true, y_pred, and anomaly_scores as corresponding objects
     save(

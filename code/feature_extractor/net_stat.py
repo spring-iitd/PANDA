@@ -1,4 +1,5 @@
 import copy
+import time
 
 import numpy as np
 import pyximport
@@ -84,31 +85,21 @@ class netStat:
 
         return src_subnet, dst_subnet
 
-    # def updatePreviousStats(self):
-    #     self.previous_stats['HT_MI'] = self.HT_MI.copy()
-    #     self.previous_stats['HT_H'] = self.HT_H.copy()
-    #     self.previous_stats['HT_jit'] = self.HT_jit.copy()
-    #     self.previous_stats['HT_Hp'] = self.HT_Hp.copy()
-
-    # def revertUpdate(self):
-    #     self.HT_MI = self.previous_stats['HT_MI'].copy()
-    #     self.HT_H = self.previous_stats['HT_H'].copy()
-    #     self.HT_jit = self.previous_stats['HT_jit'].copy()
-    #     self.HT_Hp = self.previous_stats['HT_Hp'].copy()
-
-    import copy
-
     def updatePreviousStats(self):
+        time.time()
         self.previous_stats["HT_MI"] = copy.deepcopy(self.HT_MI)
         self.previous_stats["HT_H"] = copy.deepcopy(self.HT_H)
         self.previous_stats["HT_jit"] = copy.deepcopy(self.HT_jit)
         self.previous_stats["HT_Hp"] = copy.deepcopy(self.HT_Hp)
+        # print("Time to update previous stats: ", time.time() - start)
 
     def revertUpdate(self):
+        time.time()
         self.HT_MI = copy.deepcopy(self.previous_stats["HT_MI"])
         self.HT_H = copy.deepcopy(self.previous_stats["HT_H"])
         self.HT_jit = copy.deepcopy(self.previous_stats["HT_jit"])
         self.HT_Hp = copy.deepcopy(self.previous_stats["HT_Hp"])
+        # print("Time to revert update: ", time.time() - start)
 
     def updateGetStats(
         self,

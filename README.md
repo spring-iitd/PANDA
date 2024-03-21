@@ -23,12 +23,12 @@ Possible Surrogate Model:
 ### Training
 For training we used a small porton of the dataset. We used a small portion because the anomaly detection model is relatively small (for edge devices), and using a lot of data might result in overfitting.
 
-```python main.py --model-name AutoencoderInt --num-epochs 20 --device cpu```
+```python main.py --model-name CNNAutoencoder --device cpu```
 
 ### Testing
 For testing, in the initial phase, we're using 120k benign samples and 6 attacks from different devices. Later, the entire dataset will be used for testing.
 
-```python main.py --model-name AutoencoderInt --num-epochs 20 --device cpu --eval```
+```python main.py --model-name CNNAutoencoder --device cpu --eval```
 
 ### Anomaly Score
 Differs from model to model. Here, -ve of the reonstruction error.
@@ -46,7 +46,7 @@ So far, we have tried attacks such as:
 
 To run an attack, run the following command:
 
-```python attack_main.py --device cpu --attack fgsm```
+```python attack_main.py --surrogate-model AutoencoderRaw --attack loopback_pgd```
 
 ## Scope of Change in Code:
 1. Addition of a new data representation method:\

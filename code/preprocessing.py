@@ -15,8 +15,12 @@ class FeatureRepresentation:
         prev_time = float(self.prev_packet.time)
         int_diff = current_time - prev_time
 
+        # Define your min and max IAT values
+        # max_iat = 2.0  # Adjust this value based on your specific context
+
         if get_integer:
             iat_tensor = torch.tensor([int_diff])
+            # iat_tensor = (iat_tensor - min_iat) / (max_iat - min_iat)
         else:
             diff = int(max(int_diff * 1000000, 0))
             iat_bits = bin(diff)[2:]
@@ -84,6 +88,7 @@ class FeatureRepresentation:
             max_size = 1518  # maximum frame size
 
             normalized_size = (packet_size - min_size) / (max_size - min_size)
+            # normalized_size = packet_size
             packet_size_tensor = torch.tensor([normalized_size])
         else:
             packet_size_bits = format(packet_size, f"0{MAX_BITS_SIZE}b")
@@ -104,10 +109,15 @@ class FeatureRepresentation:
         self.prev_packet = prev_packet
         try:
             iat_tensor = self._extract_iat()
+            # print(f"iat_tensor: {iat_tensor}")
             mac_tensor = self._extract_mac_address()
+            # print(f"mac_tensor: {mac_tensor}")
             ip_tensor = self._extract_ip_address()
+            # print(f"ip_tensor: {ip_tensor}")
             port_tensor = self._extract_port()
+            # print(f"port_tensor: {port_tensor}")
             packet_size_tensor = self._extract_packet_size()
+            # print(f"packet_size_tensor: {packet_size_tensor}")
 
             packet_tensor = torch.cat(
                 (

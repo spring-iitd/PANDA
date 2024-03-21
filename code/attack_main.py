@@ -6,7 +6,6 @@ import scapy.all as scapy
 import torch.nn as nn
 from attacks import Attack
 
-from utils import save
 
 def update_timestamps(pcap_file, inter_arrival_times, adv_pcap_path):
     """
@@ -28,7 +27,18 @@ def update_timestamps(pcap_file, inter_arrival_times, adv_pcap_path):
 
         packet.time = new_timestamp
 
+    packets.sort(key=lambda packet: packet.time)
+
+    increment = 0.0001
+    for i in range(1, len(packets)):
+        if packets[i].time <= packets[i - 1].time:
+            packets[i].time = packets[i].time + increment
+            increment += 0.0001
+        else:
+            increment = 0.0001
+
     scapy.wrpcap(adv_pcap_path, packets)
+
 
 def update_timestamps_raw(pcap_file, adv_timestamps, adv_pcap_path):
     """
@@ -39,9 +49,15 @@ def update_timestamps_raw(pcap_file, adv_timestamps, adv_pcap_path):
     dropped because last batch doesn't form an image.
     """
     packets = scapy.rdpcap(pcap_file)
+    same = 0
     for i, packet in enumerate(packets):
+        if packet.time == adv_timestamps[i]:
+            same += 1
         packet.time = adv_timestamps[i]
 
+    print("Number of same timestamps:", same, "out of", i)
+
+    packets.sort(key=lambda packet: packet.time)
     scapy.wrpcap(adv_pcap_path, packets)
 
 
@@ -56,7 +72,9 @@ def get_args_parser():
         help="folder where all the code, data, and artifacts lie",
     )
     parser.add_argument(
-        "--pcap-path", default="../data/malicious/Port_Scanning_SmartTV.pcap", type=str
+        "--pcap-path",
+        default="../data/malicious/Port_Scanning_SmartTV.pcap",
+        type=str,
     )
     parser.add_argument("--batch-size", default=1, type=int)
     parser.add_argument(
@@ -64,7 +82,7 @@ def get_args_parser():
     )
     parser.add_argument(
         "--surrogate-model",
-        default="Autoencoder",
+        default="CNNAutoencoder",
         type=str,
         help="Name of the surrogate model",
     )
@@ -77,9 +95,18 @@ def get_args_parser():
         type=str,
         help="Name of the attack to perform or inference",
     )
-    parser.add_argument("--selected-columns", nargs="+", default=list(range(32)), type=list)
+    # TODO: change selected-cols to mask and use const file to define different masks
+    parser.add_argument(
+        "--selected-columns", nargs="+", default=list(range(32)), type=list
+    )
     parser.add_argument(
         "--eval", action="store_true", default=False, help="perform attack inference"
+    )
+    parser.add_argument(
+        "--threshold",
+        default=0.2,
+        type=float,
+        help="Threshold of surrogate model",
     )
 
     return parser
@@ -93,65 +120,110 @@ def main(args):
     args.adv_pcap_path = (
         f"../data/adversarial/{args.attack}/Adv_{args.pcap_path.split('/')[-1]}"
     )
+
     attack = Attack(args=args)
     attack_method = getattr(attack, args.attack)
-    re, adv_re, y_true, y_pred, taus, adv_timestamps, adv_sizes, actual_sizes = attack_method(epsilon=0.01)
+
+    # below line is for loopback
+    (
+        re,
+        adv_re,
+        y_true,
+        y_pred,
+        taus,
+        adv_timestamps,
+        adv_sizes,
+        actual_sizes,
+    ) = attack_method(epsilon=0.5)
+
+    # below line is for others
+    # re, adv_re, y_true, y_pred, taus = attack_method(epsilon=0.3)
 
     print(f"Pcap file: {args.pcap_path.split('/')[-1][:-5]}")
     print(f"Mean RE for malicious packets: {sum(re)/ len(re)}")
     print(f"Mean RE for adversarial malicious packets: {sum(adv_re)/ len(adv_re)}")
 
-    save(
-        path="../artifacts/objects/attacks/loopback_pgd/adv_sizes",
-        params={"adv_sizes": adv_sizes},
-    )
+    # this for when we're perturbing size
+    # save(
+    #     path="../artifacts/objects/attacks/loopback_pgd/adv_sizes",
+    #     params={"adv_sizes": adv_sizes},
+    # )
 
     evasion_rate = 1 - (sum(y_pred) / len(y_pred))
     print(f"Evasion Rate: {evasion_rate}")
 
     # create adversarial packets
-    if args.surrogate_model == "AutoencoderRaw":
-        update_timestamps_raw(args.pcap_path, adv_timestamps, args.adv_pcap_path)
-    else:
-        update_timestamps(args.pcap_path, taus, args.adv_pcap_path)
+    # if args.surrogate_model.raw == True:
+    update_timestamps_raw(args.pcap_path, adv_timestamps, args.adv_pcap_path)
+    # else:
+    #     update_timestamps(args.pcap_path, taus, args.adv_pcap_path)
 
     # Plot the reconstruction error curve
     re = [np.array(elem.to("cpu")) for elem in re]
     adv_re = [np.array(elem.to("cpu")) for elem in adv_re]
 
-    # Generate x-axis values (image indices)
-    image_indices = np.arange(len(re))
+    _, ax1 = plt.subplots(constrained_layout=True, figsize=(10, 5), dpi=200)
+    x_val = np.arange(len(re))
 
+    # try:
+    ax1.scatter(x_val, re, s=1, alpha=1.0, c="green", label="Clean Data")
+    ax1.scatter(x_val, adv_re, s=1, alpha=1.0, c="red", label="Advesarial Data")
 
-    # Create a line curve (line plot)
-    plt.figure(figsize=(10, 6))
-    plt.plot(
-        image_indices, re, marker="o", linestyle="-", color="b", label="Clean Data"
-    )
-    image_indices = np.arange(len(adv_re))
-    plt.plot(
-        image_indices,
-        adv_re,
-        marker="o",
-        linestyle="-",
-        color="r",
-        label="Advesarial Data",
-    )
-    plt.axhline(y=0.2661, color="green", linestyle="--", label="Threshold")
-    plt.title(
-        f"Reconstruction Error Curve: {args.pcap_path.split('/')[-1][:-5]}_{args.attack}"
-    )
-    plt.xlabel("Image Index")
-    plt.ylabel("Reconstruction Error")
+    # Create the legend
+    legend = ax1.legend()
 
-    # Add legend
+    # Increase the size of the legend markers
+    legend.legendHandles[0]._sizes = [30]
+    legend.legendHandles[1]._sizes = [30]
+    # except Exception as e:
+    #     print(f"Error: {e}")
+    #     ax1.scatter(x_val, re, s=1, alpha=1.0, c="green", label="Clean Data")
+    #     ax1.scatter(x_val, adv_re, s=1, alpha=1.0, c="red", label="Advesarial Data")
+
+    ax1.axhline(y=args.threshold, color="blue", linestyle="--", label="Threshold")
+    ax1.set_yscale("log")
+    ax1.set_title("Anomaly Scores from Kitsune Execution Phase")
+    ax1.set_ylabel("RMSE (log scaled)")
+    ax1.set_xlabel("Packet index")
     plt.legend()
-    plt.grid(True)
 
     # Show or save the plot
     plt.savefig(
         f"../artifacts/plots/{args.pcap_path.split('/')[-1][:-5]}_{args.attack}.png"
     )
+    plt.close()
+
+    # # Generate x-axis values (image indices)
+    # image_indices = np.arange(len(re))
+    # # Create a line curve (line plot)
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(
+    #     image_indices, re, marker="o", linestyle="-", color="b", label="Clean Data"
+    # )
+    # image_indices = np.arange(len(adv_re))
+    # plt.plot(
+    #     image_indices,
+    #     adv_re,
+    #     marker="o",
+    #     linestyle="-",
+    #     color="r",
+    #     label="Advesarial Data",
+    # )
+    # plt.axhline(y=args.threshold, color="green", linestyle="--", label="Threshold")
+    # plt.title(
+    #     f"Reconstruction Error Curve: {args.pcap_path.split('/')[-1][:-5]}_{args.attack}"
+    # )
+    # plt.xlabel("Image Index")
+    # plt.ylabel("Reconstruction Error")
+
+    # # Add legend
+    # plt.legend()
+    # plt.grid(True)
+
+    # Show or save the plot
+    # plt.savefig(
+    #     f"../artifacts/plots/{args.pcap_path.split('/')[-1][:-5]}_{args.attack}.png"
+    # )
 
 
 if __name__ == "__main__":
