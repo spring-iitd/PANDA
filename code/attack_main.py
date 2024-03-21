@@ -49,8 +49,6 @@ def update_timestamps_raw(pcap_file, adv_timestamps, adv_pcap_path):
     dropped because last batch doesn't form an image.
     """
     packets = scapy.rdpcap(pcap_file)
-    print("Original timestamp of 5th packet:", packets[5].time)
-    print("Expected new timestamp of 5th packet:", adv_timestamps[5])
     same = 0
     for i, packet in enumerate(packets):
         if packet.time == adv_timestamps[i]:
@@ -58,7 +56,6 @@ def update_timestamps_raw(pcap_file, adv_timestamps, adv_pcap_path):
         packet.time = adv_timestamps[i]
 
     print("Number of same timestamps:", same, "out of", i)
-    print("Updated timestamp of 5th packet:", packets[5].time)
 
     packets.sort(key=lambda packet: packet.time)
     scapy.wrpcap(adv_pcap_path, packets)
@@ -76,7 +73,7 @@ def get_args_parser():
     )
     parser.add_argument(
         "--pcap-path",
-        default="../data/malicious/Port_Scanning_SmartTV_Filtered_500.pcap",
+        default="../data/malicious/Port_Scanning_SmartTV.pcap",
         type=str,
     )
     parser.add_argument("--batch-size", default=1, type=int)
@@ -162,42 +159,71 @@ def main(args):
     #     update_timestamps(args.pcap_path, taus, args.adv_pcap_path)
 
     # Plot the reconstruction error curve
-    re = [np.array(elem.to("cpu")) for elem in re][20:100]
-    adv_re = [np.array(elem.to("cpu")) for elem in adv_re][20:100]
+    re = [np.array(elem.to("cpu")) for elem in re]
+    adv_re = [np.array(elem.to("cpu")) for elem in adv_re]
 
-    # Generate x-axis values (image indices)
-    image_indices = np.arange(len(re))
+    _, ax1 = plt.subplots(constrained_layout=True, figsize=(10, 5), dpi=200)
+    x_val = np.arange(len(re))
 
-    # Create a line curve (line plot)
-    plt.figure(figsize=(10, 6))
-    plt.plot(
-        image_indices, re, marker="o", linestyle="-", color="b", label="Clean Data"
-    )
-    image_indices = np.arange(len(adv_re))
-    plt.plot(
-        image_indices,
-        adv_re,
-        marker="o",
-        linestyle="-",
-        color="r",
-        label="Advesarial Data",
-    )
-    # TODO: #absolute value for threshold. REMOVE!!!!
-    plt.axhline(y=765.83, color="green", linestyle="--", label="Threshold")
-    plt.title(
-        f"Reconstruction Error Curve: {args.pcap_path.split('/')[-1][:-5]}_{args.attack}"
-    )
-    plt.xlabel("Image Index")
-    plt.ylabel("Reconstruction Error")
+    # try:
+    ax1.scatter(x_val, re, s=1, alpha=1.0, c="green", label="Clean Data")
+    ax1.scatter(x_val, adv_re, s=1, alpha=1.0, c="red", label="Advesarial Data")
 
-    # Add legend
+    # Create the legend
+    legend = ax1.legend()
+
+    # Increase the size of the legend markers
+    legend.legendHandles[0]._sizes = [30]
+    legend.legendHandles[1]._sizes = [30]
+    # except Exception as e:
+    #     print(f"Error: {e}")
+    #     ax1.scatter(x_val, re, s=1, alpha=1.0, c="green", label="Clean Data")
+    #     ax1.scatter(x_val, adv_re, s=1, alpha=1.0, c="red", label="Advesarial Data")
+
+    ax1.axhline(y=args.threshold, color="blue", linestyle="--", label="Threshold")
+    ax1.set_yscale("log")
+    ax1.set_title("Anomaly Scores from Kitsune Execution Phase")
+    ax1.set_ylabel("RMSE (log scaled)")
+    ax1.set_xlabel("Packet index")
     plt.legend()
-    plt.grid(True)
 
     # Show or save the plot
     plt.savefig(
         f"../artifacts/plots/{args.pcap_path.split('/')[-1][:-5]}_{args.attack}.png"
     )
+    plt.close()
+
+    # # Generate x-axis values (image indices)
+    # image_indices = np.arange(len(re))
+    # # Create a line curve (line plot)
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(
+    #     image_indices, re, marker="o", linestyle="-", color="b", label="Clean Data"
+    # )
+    # image_indices = np.arange(len(adv_re))
+    # plt.plot(
+    #     image_indices,
+    #     adv_re,
+    #     marker="o",
+    #     linestyle="-",
+    #     color="r",
+    #     label="Advesarial Data",
+    # )
+    # plt.axhline(y=args.threshold, color="green", linestyle="--", label="Threshold")
+    # plt.title(
+    #     f"Reconstruction Error Curve: {args.pcap_path.split('/')[-1][:-5]}_{args.attack}"
+    # )
+    # plt.xlabel("Image Index")
+    # plt.ylabel("Reconstruction Error")
+
+    # # Add legend
+    # plt.legend()
+    # plt.grid(True)
+
+    # Show or save the plot
+    # plt.savefig(
+    #     f"../artifacts/plots/{args.pcap_path.split('/')[-1][:-5]}_{args.attack}.png"
+    # )
 
 
 if __name__ == "__main__":

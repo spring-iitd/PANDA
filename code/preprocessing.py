@@ -88,6 +88,7 @@ class FeatureRepresentation:
             max_size = 1518  # maximum frame size
 
             normalized_size = (packet_size - min_size) / (max_size - min_size)
+            # normalized_size = packet_size
             packet_size_tensor = torch.tensor([normalized_size])
         else:
             packet_size_bits = format(packet_size, f"0{MAX_BITS_SIZE}b")

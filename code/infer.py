@@ -221,7 +221,6 @@ def infer(args):
 
         try:
             ax1.scatter(x_val, anomaly_scores, s=1, c="#00008B")
-            print("Implemented!!! try")
         except Exception as e:
             print(f"Error: {e}")
             ax1.scatter(x_val, anomaly_scores, s=1, alpha=1.0, c="#FF8C00")
@@ -230,7 +229,7 @@ def infer(args):
         ax1.set_yscale("log")
         ax1.set_title("Anomaly Scores from Kitsune Execution Phase")
         ax1.set_ylabel("RMSE (log scaled)")
-        ax1.set_xlabel("packet index")
+        ax1.set_xlabel("Packet index")
 
         # Show or save the plot
         plt.savefig(f"../artifacts/plots/{pcap_path.split('/')[-1][:-5]}_re.png")
