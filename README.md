@@ -46,7 +46,7 @@ So far, we have tried attacks such as:
 
 To run an attack, run the following command:
 
-```python attack_main.py --surrogate-model AutoencoderRaw --attack loopback_pgd```
+```python attack_main.py --surrogate-model KitNET --attack loopback_pgd --device cpu```
 
 ## Scope of Change in Code:
 1. Addition of a new data representation method:\
