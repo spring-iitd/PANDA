@@ -145,5 +145,5 @@ Questions and Pointers:
 1. Do I reply the response packets as well or just the request packets?
 2. Size changes in UDP connection doesn't requries change in sequence numbers of subsequent packets. Same with ACK, UDP, and SYN flooding.
 3. For a TCP connection, it's crucial to change the sequence numbers of all the subsequent packets, if you change the sequence number of one packet.
-4. For PS, SD, and ARP Spoofing, it's crucial to investigate which technique is used to get the results, then the sequence number change will depend on that.
+4. For PS, SD, and ARP Spoofing, it's crucial to investigate which technique is used to get the results, then the sequence number change will depend on that. Obtain the technique used from this link.
 https://nmap.org/book/man-port-scanning-techniques.html
